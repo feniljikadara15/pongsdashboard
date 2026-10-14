@@ -1,182 +1,182 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
+import { Pencil, FileText, HardHat, Users2, Plus } from 'lucide-react'
+import { Badge, StatusBadge, EmptyState, PageLoading, Avatar } from '@/components/ui'
+import ClientFormModal, { CLIENT_STATUS_LABEL, SOURCE_LABEL, type ClientForm } from '@/components/ClientFormModal'
+import { PROJECT_STATUS_LABELS } from '@/components/ProjectFormModal'
+import { fmtINR, fmtDate } from '@/lib/format'
 
-interface Client {
-  id: string; name: string; company: string; email: string; phone: string
-  city: string; address: string; gst_number: string; source: string; status: string
-  notes: string; created_at: string
-}
-interface Quote { id: string; clientName: string; grandTotal: number; status: string; created_at: string }
-interface Project { id: string; name: string; status: string; contract_value: number; created_at: string }
+interface Client extends ClientForm { id: string; created_at: string }
+// Shapes returned by GET /api/clients/[id]
+interface QuoteRow { id: string; quote_number: string; project_name: string; date: string; grand_total: number; status: string }
+interface ProjectRow { id: string; name: string; status: string; scheduled_date: string; ceiling_area_sqft: number; contract_value: number }
 
-function fmtINR(n: number) { return '₹' + Math.round(n).toLocaleString('en-IN') }
-function fmtDate(s: string) { return s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }
+const STATUS_TONE: Record<string, 'success' | 'neutral' | 'accent' | 'danger'> = { active: 'success', inactive: 'neutral', vip: 'accent', blacklisted: 'danger' }
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [client, setClient] = useState<Client | null>(null)
-  const [quotes, setQuotes] = useState<Quote[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
+  const [quotes, setQuotes] = useState<QuoteRow[]>([])
+  const [projects, setProjects] = useState<ProjectRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/clients/${id}`)
-    const data = await r.json()
-    setClient(data.client)
-    setQuotes(data.quotes || [])
-    setProjects(data.projects || [])
+    if (!r.ok) { setClient(null); setLoading(false); return }
+    // The API returns the client's own fields at the top level, plus its
+    // quotes and projects.
+    const { quotes: q, projects: p, ...c } = await r.json()
+    setClient(c as Client)
+    setQuotes(q || [])
+    setProjects(p || [])
     setLoading(false)
   }, [id])
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-  if (!client) return <div className="text-center py-16 text-gray-400">Client not found</div>
+  if (loading) return <PageLoading />
+  if (!client) {
+    return (
+      <div className="card mt-8">
+        <EmptyState icon={Users2} title="Client not found" description="It may have been deleted, or you may not have access."
+          action={<a href="/clients" className="btn-secondary">All clients</a>} />
+      </div>
+    )
+  }
 
-  const totalQuoteValue = quotes.reduce((s, q) => s + Number(q.grandTotal || 0), 0)
-  const totalProjectValue = projects.reduce((s, p) => s + Number(p.contract_value || 0), 0)
-
-  const statusColor: Record<string, string> = {
-    active: 'bg-green-100 text-green-700', inactive: 'bg-gray-100 text-gray-600',
-    vip: 'bg-yellow-100 text-yellow-700', blacklisted: 'bg-red-100 text-red-700'
-  }
-  const quoteStatusColor: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-600', sent: 'bg-blue-100 text-blue-700',
-    approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700'
-  }
-  const projectStatusColor: Record<string, string> = {
-    scheduled: 'bg-blue-100 text-blue-700', 'in_progress': 'bg-orange-100 text-orange-700',
-    completed: 'bg-green-100 text-green-700', invoiced: 'bg-purple-100 text-purple-700'
-  }
+  const quoted = quotes.reduce((s, q) => s + Number(q.grand_total || 0), 0)
+  const won = quotes.filter(q => q.status === 'approved').reduce((s, q) => s + Number(q.grand_total || 0), 0)
+  const contracted = projects.reduce((s, p) => s + Number(p.contract_value || 0), 0)
+  const display = client.company || client.name
+  const newQuoteHref = `/quotes/new`
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <a href="/clients" className="text-sm text-gray-500 hover:text-gray-900">← Clients</a>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[client.status] || 'bg-gray-100 text-gray-600'}`}>{client.status}</span>
+    <div className="animate-fade-in">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <Avatar name={display} size={48} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-[22px] font-semibold tracking-tight text-gray-900">{display}</h1>
+              <Badge tone={STATUS_TONE[client.status] ?? 'neutral'}>{CLIENT_STATUS_LABEL[client.status] ?? client.status}</Badge>
             </div>
-            {client.company && <p className="text-gray-500 mt-1">{client.company}</p>}
-          </div>
-          <a href={`/clients/${id}/edit`} className="text-sm text-gray-500 hover:text-gray-900 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Edit</a>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Phone</div>
-            <div className="font-medium text-gray-900">{client.phone || '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Email</div>
-            <div className="font-medium text-gray-900 break-all">{client.email || '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">City</div>
-            <div className="font-medium text-gray-900">{client.city || '—'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Source</div>
-            <div className="font-medium text-gray-900 capitalize">{client.source?.replace('_', ' ') || '—'}</div>
-          </div>
-          {client.gst_number && (
-            <div>
-              <div className="text-xs text-gray-500 mb-1">GST</div>
-              <div className="font-medium text-gray-900">{client.gst_number}</div>
-            </div>
-          )}
-          {client.address && (
-            <div className="col-span-2">
-              <div className="text-xs text-gray-500 mb-1">Address</div>
-              <div className="font-medium text-gray-900">{client.address}</div>
-            </div>
-          )}
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Client Since</div>
-            <div className="font-medium text-gray-900">{fmtDate(client.created_at)}</div>
+            <p className="mt-1 text-[13px] text-gray-500">
+              {[client.company ? client.name : null, client.city, `Client since ${fmtDate(client.created_at)}`].filter(Boolean).join(' · ')}
+            </p>
           </div>
         </div>
-
-        {client.notes && (
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-            <div className="text-xs text-gray-500 mb-1">Notes</div>
-            <p className="text-sm text-gray-700">{client.notes}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">{quotes.length}</div>
-          <div className="text-xs text-gray-500 mt-1">Total Quotes</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-          <div className="text-lg font-bold text-gray-900">{fmtINR(totalQuoteValue)}</div>
-          <div className="text-xs text-gray-500 mt-1">Quoted Value</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
-          <div className="text-lg font-bold text-gray-900">{fmtINR(totalProjectValue)}</div>
-          <div className="text-xs text-gray-500 mt-1">Project Value</div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <a href={newQuoteHref} className="btn-secondary"><Plus size={14} /> New quote</a>
+          <button onClick={() => setEditing(true)} className="btn-primary"><Pencil size={14} /> Edit client</button>
         </div>
       </div>
 
-      {quotes.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 font-semibold text-gray-900">Quotes ({quotes.length})</div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Quote</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {quotes.map(q => (
-                <tr key={q.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3"><a href={`/quotes/${q.id}`} className="text-blue-600 hover:underline font-mono text-xs">{q.id.slice(0, 8)}</a></td>
-                  <td className="px-4 py-3 text-gray-500">{fmtDate(q.created_at)}</td>
-                  <td className="px-4 py-3 text-right font-medium">{q.grandTotal ? fmtINR(Number(q.grandTotal)) : '—'}</td>
-                  <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${quoteStatusColor[q.status] || 'bg-gray-100 text-gray-600'}`}>{q.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section className="card mb-6">
+        <dl className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
+          <Metric label="Quotes" value={String(quotes.length)} hint={`${quotes.filter(q => q.status === 'approved').length} approved`} />
+          <Metric label="Quoted value" value={fmtINR(quoted)} />
+          <Metric label="Won" value={fmtINR(won)} hint={quoted ? `${Math.round((won / quoted) * 100)}% of quoted value` : undefined} />
+          <Metric label="Contracted projects" value={fmtINR(contracted)} hint={`${projects.length} project${projects.length !== 1 ? 's' : ''}`} />
+        </dl>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-4 min-w-0">
+          <section className="table-wrap">
+            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+              <h2 className="card-title">Quotes</h2>
+              <span className="text-xs text-gray-500">{quotes.length}</span>
+            </div>
+            {quotes.length === 0 ? (
+              <EmptyState icon={FileText} title="No quotes for this client" description={`Quotes whose client is "${client.name}"${client.company ? ` or "${client.company}"` : ''} appear here.`} compact />
+            ) : (
+              <div className="table-scroll">
+                <table className="table table-hover">
+                  <thead><tr><th>Quote</th><th className="hidden sm:table-cell">Project</th><th className="hidden md:table-cell">Date</th><th>Status</th><th className="num">Amount</th></tr></thead>
+                  <tbody>
+                    {quotes.map(q => (
+                      <tr key={q.id} className="cursor-pointer" onClick={() => { window.location.href = `/quotes/${q.id}/team` }}>
+                        <td><a href={`/quotes/${q.id}/team`} className="mono text-xs font-medium text-gray-900 hover:underline">{q.quote_number}</a></td>
+                        <td className="hidden sm:table-cell">{q.project_name || '—'}</td>
+                        <td className="hidden md:table-cell whitespace-nowrap tabular-nums">{fmtDate(q.date)}</td>
+                        <td><StatusBadge status={q.status} /></td>
+                        <td className="num font-medium text-gray-900">{Number(q.grand_total) ? fmtINR(Number(q.grand_total)) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="table-wrap">
+            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+              <h2 className="card-title">Projects</h2>
+              <span className="text-xs text-gray-500">{projects.length}</span>
+            </div>
+            {projects.length === 0 ? (
+              <EmptyState icon={HardHat} title="No projects for this client" compact />
+            ) : (
+              <div className="table-scroll">
+                <table className="table table-hover">
+                  <thead><tr><th>Project</th><th className="hidden md:table-cell">Scheduled</th><th>Status</th><th className="num hidden sm:table-cell">Area</th><th className="num">Value</th></tr></thead>
+                  <tbody>
+                    {projects.map(p => (
+                      <tr key={p.id} className="cursor-pointer" onClick={() => { window.location.href = `/projects/${p.id}` }}>
+                        <td><a href={`/projects/${p.id}`} className="font-medium text-gray-900 hover:underline">{p.name}</a></td>
+                        <td className="hidden md:table-cell whitespace-nowrap tabular-nums">{fmtDate(p.scheduled_date)}</td>
+                        <td><StatusBadge status={p.status} label={PROJECT_STATUS_LABELS[p.status]} /></td>
+                        <td className="num hidden sm:table-cell">{p.ceiling_area_sqft ? `${p.ceiling_area_sqft} sqft` : '—'}</td>
+                        <td className="num font-medium text-gray-900">{Number(p.contract_value) ? fmtINR(Number(p.contract_value)) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
+
+        <aside className="card self-start">
+          <div className="card-header"><h2 className="card-title">Contact details</h2></div>
+          <dl className="space-y-4 p-5 text-[13px]">
+            <Detail label="Contact">{client.name}</Detail>
+            <Detail label="Phone">{client.phone ? <a href={`tel:${client.phone}`} className="hover:underline">{client.phone}</a> : '—'}</Detail>
+            <Detail label="Email">{client.email ? <a href={`mailto:${client.email}`} className="break-all hover:underline">{client.email}</a> : '—'}</Detail>
+            <Detail label="Address">{[client.address, client.city].filter(Boolean).join(', ') || '—'}</Detail>
+            <Detail label="GSTIN">{client.gst_number ? <span className="mono">{client.gst_number}</span> : '—'}</Detail>
+            <Detail label="Source">{SOURCE_LABEL[client.source] ?? client.source ?? '—'}</Detail>
+            {client.notes && <Detail label="Notes"><span className="whitespace-pre-line">{client.notes}</span></Detail>}
+          </dl>
+        </aside>
+      </div>
+
+      {editing && (
+        <ClientFormModal id={client.id}
+          initial={{ name: client.name, company: client.company || '', email: client.email || '', phone: client.phone || '', city: client.city || '', address: client.address || '', gst_number: client.gst_number || '', source: client.source || 'direct', status: client.status || 'active', notes: client.notes || '' }}
+          onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load() }} />
       )}
+    </div>
+  )
+}
 
-      {projects.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 font-semibold text-gray-900">Projects ({projects.length})</div>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Project</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Value</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {projects.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3"><a href={`/projects/all`} className="font-medium text-gray-900 hover:underline">{p.name}</a></td>
-                  <td className="px-4 py-3 text-gray-500">{fmtDate(p.created_at)}</td>
-                  <td className="px-4 py-3 text-right font-medium">{p.contract_value ? fmtINR(Number(p.contract_value)) : '—'}</td>
-                  <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full ${projectStatusColor[p.status] || 'bg-gray-100 text-gray-600'}`}>{p.status?.replace('_', ' ')}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="px-5 py-4">
+      <dt className="text-xs font-medium text-gray-500">{label}</dt>
+      <dd className="mt-1 text-lg font-semibold tracking-tight text-gray-900 tabular-nums">{value}</dd>
+      {hint && <dd className="mt-0.5 text-xs text-gray-500">{hint}</dd>}
+    </div>
+  )
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-gray-500">{label}</dt>
+      <dd className="mt-0.5 text-gray-900">{children}</dd>
     </div>
   )
 }

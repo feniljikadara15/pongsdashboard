@@ -1,20 +1,23 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { initClientsTable, getDbClient } from '@/lib/db'
+import { initClientsTable, initQuotesTable, getDbClient } from '@/lib/db'
 import { requirePermission } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
   const _auth = await requirePermission('clients', 'view')
   if ('error' in _auth) return _auth.error
   await initClientsTable()
+  await initQuotesTable()
   const db = getDbClient()
   const q = req.nextUrl.searchParams.get('q') ?? ''
+  // Quotes are often raised against the company rather than the contact, so
+  // a client's quotes match on either name.
   const sql = q
-    ? `SELECT c.*, (SELECT COUNT(*) FROM pongs_quotes WHERE client_name = c.name) as quote_count,
-        (SELECT COALESCE(SUM(grand_total),0) FROM pongs_quotes WHERE client_name = c.name) as total_value
+    ? `SELECT c.*, (SELECT COUNT(*) FROM pongs_quotes WHERE client_name = c.name OR (c.company IS NOT NULL AND c.company != '' AND client_name = c.company)) as quote_count,
+        (SELECT COALESCE(SUM(grand_total),0) FROM pongs_quotes WHERE client_name = c.name OR (c.company IS NOT NULL AND c.company != '' AND client_name = c.company)) as total_value
        FROM clients c WHERE c.name LIKE ? OR c.company LIKE ? OR c.city LIKE ? ORDER BY c.name`
-    : `SELECT c.*, (SELECT COUNT(*) FROM pongs_quotes WHERE client_name = c.name) as quote_count,
-        (SELECT COALESCE(SUM(grand_total),0) FROM pongs_quotes WHERE client_name = c.name) as total_value
+    : `SELECT c.*, (SELECT COUNT(*) FROM pongs_quotes WHERE client_name = c.name OR (c.company IS NOT NULL AND c.company != '' AND client_name = c.company)) as quote_count,
+        (SELECT COALESCE(SUM(grand_total),0) FROM pongs_quotes WHERE client_name = c.name OR (c.company IS NOT NULL AND c.company != '' AND client_name = c.company)) as total_value
        FROM clients c ORDER BY c.name`
   const result = q ? await db.execute(sql, [`%${q}%`, `%${q}%`, `%${q}%`]) : await db.execute(sql)
   return NextResponse.json(result.rows)

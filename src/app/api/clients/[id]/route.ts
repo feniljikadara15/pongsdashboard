@@ -1,17 +1,23 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { initClientsTable, getDbClient } from '@/lib/db'
+import { initClientsTable, initQuotesTable, getDbClient } from '@/lib/db'
 import { requirePermission } from '@/lib/session'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const _auth = await requirePermission('clients', 'view')
   if ('error' in _auth) return _auth.error
   await initClientsTable()
+  await initQuotesTable()
   const db = getDbClient()
   const c = await db.execute('SELECT * FROM clients WHERE id = ?', [params.id])
   if (!c.rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const quotes = await db.execute('SELECT id, quote_number, project_name, date, grand_total, status FROM pongs_quotes WHERE client_name = (SELECT name FROM clients WHERE id = ?) ORDER BY created_at DESC', [params.id])
-  const projects = await db.execute('SELECT id, name, status, scheduled_date, ceiling_area_sqft, contract_value FROM projects WHERE client_name = (SELECT name FROM clients WHERE id = ?) ORDER BY scheduled_date DESC', [params.id])
+  // Match on the contact name or the company name; quotes and projects are
+  // usually recorded against the company.
+  const row = c.rows[0] as Record<string, unknown>
+  const names = [String(row.name ?? ''), String(row.company ?? '')].filter(Boolean)
+  const ph = names.map(() => '?').join(',')
+  const quotes = await db.execute(`SELECT id, quote_number, project_name, date, grand_total, status FROM pongs_quotes WHERE client_name IN (${ph}) ORDER BY created_at DESC`, names)
+  const projects = await db.execute(`SELECT id, name, status, scheduled_date, ceiling_area_sqft, contract_value FROM projects WHERE client_name IN (${ph}) ORDER BY scheduled_date DESC`, names)
   return NextResponse.json({ ...c.rows[0], quotes: quotes.rows, projects: projects.rows })
 }
 

@@ -2,6 +2,7 @@ import { createClient, type InValue } from '@libsql/client'
 import type { Quote } from './types'
 import { fullPermissions, parsePermissions, permissionsForLegacyRole } from './permissions'
 import { hashPassword } from './password'
+import { calculateQuote } from './calculations'
 
 let _client: ReturnType<typeof createClient> | null = null
 
@@ -15,7 +16,9 @@ function getClient() {
   return _client
 }
 
+let _quotesInit = false
 export async function initQuotesTable() {
+  if (_quotesInit) return
   const db = getClient()
   await db.execute(`
     CREATE TABLE IF NOT EXISTS pongs_quotes (
@@ -76,6 +79,25 @@ export async function initQuotesTable() {
   // Backfill: existing standalone quotes are their own root at revision 0.
   await db.execute(`UPDATE pongs_quotes SET root_id = id WHERE root_id IS NULL OR root_id = ''`)
   await db.execute(`UPDATE pongs_quotes SET revision = 0 WHERE revision IS NULL`)
+  // Backfill: grand_total was never computed on save, so quotes created in the
+  // app were stored at 0 and reports, client totals and converted projects
+  // read 0. Recompute from the stored items wherever the total is missing.
+  const missing = await db.execute(`SELECT * FROM pongs_quotes WHERE grand_total IS NULL OR grand_total = 0`)
+  for (const row of missing.rows) {
+    const total = computeGrandTotal(rowToQuote(row))
+    if (total > 0) await db.execute('UPDATE pongs_quotes SET grand_total = ? WHERE id = ?', [total, String(row.id)])
+  }
+  _quotesInit = true
+}
+
+// Grand total from the quote's items using the same engine as the UI. Falls
+// back to any total supplied by the caller (e.g. imported quotes with no items).
+function computeGrandTotal(quote: Record<string, unknown>): number {
+  try {
+    const t = calculateQuote(quote as unknown as Quote).grandTotal
+    if (Number.isFinite(t) && t > 0) return Math.round(t * 100) / 100
+  } catch { /* incomplete quote — fall through */ }
+  return Number(quote.grandTotal ?? 0)
 }
 
 // Ownership-aware listing. Pass ownerEmail=null for admins (all quotes),
@@ -127,7 +149,7 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     String(quote.displayMode ?? 'total'),
     JSON.stringify(quote.items ?? []),
     (quote.notes as string) ?? null,
-    Number(quote.grandTotal ?? 0),
+    computeGrandTotal(quote),
     (quote.clientEmail as string) ?? null,
     (quote.clientPhone as string) ?? null,
     String((quote.status as string) ?? 'draft'),

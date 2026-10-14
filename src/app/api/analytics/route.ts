@@ -37,7 +37,7 @@ export async function GET() {
   const quoteStatus = Object.entries(statusMap).map(([status, count]) => ({ status, count }))
 
   // Inventory value
-  const products = await db.execute('SELECT category, current_stock, cost_price FROM inv_products')
+  const products = await db.execute('SELECT category, current_stock, min_stock, cost_price FROM inv_products')
   let totalInvValue = 0
   const invByCategory: Record<string, number> = {}
   for (const p of products.rows) {
