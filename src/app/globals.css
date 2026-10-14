@@ -77,7 +77,7 @@
 
   /* ---------- Surfaces ---------- */
   .card {
-    @apply bg-white rounded-lg border border-gray-200;
+    @apply bg-white rounded-lg border border-gray-200 min-w-0;
   }
   .card-hover {
     @apply card transition-colors duration-150 hover:border-gray-300;
@@ -133,8 +133,12 @@
 
   /* ---------- Tables ---------- */
   /* No overflow clipping on desktop so row menus can escape the table. */
-  .table-wrap { @apply card; }
-  .table-scroll { @apply overflow-x-auto lg:overflow-visible; }
+  /* min-w-0: as grid/flex children, cards must be allowed to shrink so wide
+     tables scroll inside them instead of widening the page. */
+  .table-wrap { @apply card min-w-0; }
+  /* relative: keeps absolutely positioned descendants (e.g. sr-only header
+     text) inside the scroll box on small screens. */
+  .table-scroll { @apply relative overflow-x-auto lg:overflow-visible; }
   .table-wrap > .table-scroll:first-child thead th:first-child,
   .table-wrap > table:first-child thead th:first-child { border-top-left-radius: 0.5rem; }
   .table-wrap > .table-scroll:first-child thead th:last-child,
@@ -181,7 +185,7 @@
 
   /* ---------- Misc ---------- */
   .kbd { @apply inline-flex items-center h-5 px-1.5 rounded border border-gray-200 bg-gray-50 font-mono text-[10px] text-gray-500; }
-  .mono { @apply font-mono tabular-nums; }
+  .mono { @apply font-mono tabular-nums whitespace-nowrap; }
   .divider { @apply border-t border-gray-200; }
   .section-title { @apply text-[13px] font-semibold text-gray-900; }
   .eyebrow { @apply text-xs font-medium text-gray-500; }
