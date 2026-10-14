@@ -1,19 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Pencil, Trash2, X, Check } from 'lucide-react'
-
-const CATEGORIES = ['Pongs Descor Fabric', 'LED Lights', 'Driver', 'Controller', 'DALI Driver', 'Gripper', 'Service', 'Power Repeater']
-const CATEGORY_COLORS: Record<string, string> = {
-  'Pongs Descor Fabric': 'bg-violet-100 text-violet-700',
-  'LED Lights': 'bg-yellow-100 text-yellow-700',
-  'Driver': 'bg-green-100 text-green-700',
-  'Controller': 'bg-blue-100 text-blue-700',
-  'DALI Driver': 'bg-indigo-100 text-indigo-700',
-  'Gripper': 'bg-orange-100 text-orange-700',
-  'Service': 'bg-rose-100 text-rose-700',
-  'Power Repeater': 'bg-cyan-100 text-cyan-700',
-}
+import { Pencil, Trash2, Plus, Package } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Modal, Field } from '@/components/ui'
+import { PRODUCT_CATEGORIES, stockState, STOCK_LABEL, STOCK_TONE } from '@/lib/inventory'
+import { fmtINR } from '@/lib/format'
 
 interface Product {
   id: string; name: string; category: string; sku: string; unit: string
@@ -28,126 +19,161 @@ export default function ProductsPage() {
   const [form, setForm] = useState(empty())
   const [editId, setEditId] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState('')
+  const [stockFilter, setStockFilter] = useState<'all' | 'attention'>('all')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  function load(cat?: string) {
-    const url = cat ? `/api/inventory/products?category=${encodeURIComponent(cat)}` : '/api/inventory/products'
-    fetch(url).then(r => r.json()).then(d => { setProducts(d); setLoading(false) })
+  function load() {
+    fetch('/api/inventory/products').then(r => r.json()).then(d => { setProducts(Array.isArray(d) ? d : []); setLoading(false) })
   }
 
   useEffect(() => { load() }, [])
 
-  function handleCatFilter(cat: string) {
-    setCatFilter(cat)
-    load(cat || undefined)
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSaving(true)
     if (editId) {
       await fetch(`/api/inventory/products/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     } else {
       await fetch('/api/inventory/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     }
-    setShowForm(false); setEditId(null); setForm(empty()); load(catFilter || undefined)
+    setSaving(false)
+    setShowForm(false); setEditId(null); setForm(empty()); load()
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this product?')) return
-    await fetch(`/api/inventory/products/${id}`, { method: 'DELETE' })
-    load(catFilter || undefined)
+  async function handleDelete(p: Product) {
+    if (!confirm(`Delete "${p.name}"? Its movement history stays in the log.`)) return
+    await fetch(`/api/inventory/products/${p.id}`, { method: 'DELETE' })
+    load()
   }
 
   function startEdit(p: Product) {
-    setEditId(p.id); setForm({ name: p.name, category: p.category, sku: p.sku, unit: p.unit, current_stock: p.current_stock, min_stock: p.min_stock, cost_price: p.cost_price, sell_price: p.sell_price, notes: p.notes })
+    setEditId(p.id); setForm({ name: p.name, category: p.category ?? '', sku: p.sku ?? '', unit: p.unit ?? 'nos', current_stock: p.current_stock, min_stock: p.min_stock, cost_price: p.cost_price, sell_price: p.sell_price, notes: p.notes ?? '' })
     setShowForm(true)
   }
 
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }))
 
+  // Categories present in the data plus the standard list, so imported
+  // categories remain filterable.
+  const categories = Array.from(new Set([...PRODUCT_CATEGORIES, ...products.map(p => p.category).filter(Boolean)]))
+    .filter(c => products.some(p => p.category === c))
+  const attentionCount = products.filter(p => ['out', 'low'].includes(stockState(Number(p.current_stock), Number(p.min_stock)))).length
+
+  const filtered = products.filter(p => {
+    if (catFilter && p.category !== catFilter) return false
+    if (stockFilter === 'attention' && !['out', 'low'].includes(stockState(Number(p.current_stock), Number(p.min_stock)))) return false
+    const q = search.toLowerCase()
+    return !q || p.name.toLowerCase().includes(q) || (p.sku ?? '').toLowerCase().includes(q)
+  })
+  const value = filtered.reduce((s, p) => s + Number(p.current_stock) * Number(p.cost_price), 0)
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Products Inventory</h1>
-        <button className="btn btn-primary text-sm" onClick={() => { setShowForm(s => !s); setEditId(null); setForm(empty()) }}>
-          {showForm ? 'Cancel' : '+ Add Product'}
-        </button>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Products"
+        description="Every stocked item with its levels and prices."
+        actions={<button className="btn-primary" onClick={() => { setEditId(null); setForm(empty()); setShowForm(true) }}><Plus size={15} strokeWidth={2.25} /> Add product</button>}
+      />
+
+      <div className="table-wrap">
+        <div className="flex flex-col gap-3 border-b border-gray-200 p-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="select h-8 w-52 text-xs" value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Category">
+              <option value="">All categories</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <div className="segmented">
+              <button data-active={stockFilter === 'all'} onClick={() => setStockFilter('all')}>All stock</button>
+              <button data-active={stockFilter === 'attention'} onClick={() => setStockFilter('attention')}>Needs attention <span className="tabular-nums text-gray-400">{attentionCount}</span></button>
+            </div>
+          </div>
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or SKU" />
+        </div>
+
+        {loading ? <LoadingRows rows={6} cols={6} /> : filtered.length === 0 ? (
+          <EmptyState icon={Package} title={products.length ? 'No products match these filters' : 'No products yet'}
+            description={products.length ? 'Try another category or search term.' : 'Add the items you stock to start tracking levels.'}
+            action={!products.length ? <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={15} /> Add product</button> : undefined} />
+        ) : (
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th className="hidden md:table-cell">Category</th>
+                  <th className="num">In stock</th>
+                  <th className="hidden sm:table-cell">Status</th>
+                  <th className="num hidden lg:table-cell">Cost</th>
+                  <th className="num hidden lg:table-cell">Sell</th>
+                  <th className="num hidden xl:table-cell">Stock value</th>
+                  <th className="w-20"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(p => {
+                  const st = stockState(Number(p.current_stock), Number(p.min_stock))
+                  return (
+                    <tr key={p.id} className="cursor-pointer" onClick={e => {
+                      if ((e.target as HTMLElement).closest('button,a')) return
+                      window.location.href = `/inventory/products/${p.id}`
+                    }}>
+                      <td className="max-w-[280px]">
+                        <a href={`/inventory/products/${p.id}`} className="block truncate font-medium text-gray-900 hover:underline">{p.name}</a>
+                        {p.sku && <div className="mono text-2xs text-gray-500">{p.sku}</div>}
+                      </td>
+                      <td className="hidden md:table-cell text-gray-600">{p.category || '—'}</td>
+                      <td className="num whitespace-nowrap">
+                        <span className="font-medium text-gray-900">{Number(p.current_stock).toLocaleString('en-IN')}</span>
+                        <span className="ml-1 text-xs text-gray-500">{p.unit}</span>
+                        {Number(p.min_stock) > 0 && <div className="text-2xs text-gray-500">min {p.min_stock}</div>}
+                      </td>
+                      <td className="hidden sm:table-cell"><Badge tone={STOCK_TONE[st]} dot>{STOCK_LABEL[st]}</Badge></td>
+                      <td className="num hidden lg:table-cell">{fmtINR(p.cost_price)}</td>
+                      <td className="num hidden lg:table-cell">{fmtINR(p.sell_price)}</td>
+                      <td className="num hidden xl:table-cell font-medium text-gray-900">{fmtINR(Number(p.current_stock) * Number(p.cost_price))}</td>
+                      <td className="text-right whitespace-nowrap">
+                        <button className="btn-ghost btn-icon" onClick={() => startEdit(p)} aria-label={`Edit ${p.name}`}><Pencil size={14} /></button>
+                        <button className="btn-ghost btn-icon text-gray-400 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(p)} aria-label={`Delete ${p.name}`}><Trash2 size={14} /></button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!loading && filtered.length > 0 && (
+          <div className="table-footer"><span>{filtered.length} of {products.length} products</span><span className="tabular-nums">Stock value {fmtINR(value)}</span></div>
+        )}
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="card mb-4 space-y-3">
-          <h2 className="font-semibold text-sm text-gray-700">{editId ? 'Edit Product' : 'New Product'}</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <div><label className="label">Name *</label><input className="input" required value={form.name} onChange={f('name')} /></div>
-            <div><label className="label">Category</label>
+        <Modal title={editId ? 'Edit product' : 'Add product'} onClose={() => { setShowForm(false); setEditId(null) }} width="max-w-xl"
+          footer={<>
+            <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); setEditId(null) }}>Cancel</button>
+            <button type="submit" form="product-form" className="btn-primary" disabled={saving || !form.name}>{saving ? 'Saving…' : editId ? 'Save changes' : 'Add product'}</button>
+          </>}>
+          <form id="product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Name" required className="sm:col-span-2"><input className="input" required value={form.name} onChange={f('name')} autoFocus /></Field>
+            <Field label="Category">
               <select className="select" value={form.category} onChange={f('category')}>
-                <option value="">Select...</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="">Uncategorised</option>
+                {Array.from(new Set([...PRODUCT_CATEGORIES, form.category].filter(Boolean))).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-            </div>
-            <div><label className="label">SKU</label><input className="input" value={form.sku} onChange={f('sku')} /></div>
-            <div><label className="label">Unit</label><input className="input" value={form.unit} onChange={f('unit')} /></div>
-            <div><label className="label">Current Stock</label><input className="input" type="number" value={form.current_stock} onChange={f('current_stock')} /></div>
-            <div><label className="label">Min Stock</label><input className="input" type="number" value={form.min_stock} onChange={f('min_stock')} /></div>
-            <div><label className="label">Cost Price (₹)</label><input className="input" type="number" value={form.cost_price} onChange={f('cost_price')} /></div>
-            <div><label className="label">Sell Price (₹)</label><input className="input" type="number" value={form.sell_price} onChange={f('sell_price')} /></div>
-            <div className="col-span-2 md:col-span-1"><label className="label">Notes</label><input className="input" value={form.notes} onChange={f('notes')} /></div>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary text-sm">{editId ? 'Update' : 'Create'}</button>
-            <button type="button" className="btn btn-secondary text-sm" onClick={() => { setShowForm(false); setEditId(null); setForm(empty()) }}>Cancel</button>
-          </div>
-        </form>
-      )}
-
-      <div className="flex items-center gap-3 mb-4">
-        <label className="label">Filter by Category:</label>
-        <select className="select w-56" value={catFilter} onChange={e => handleCatFilter(e.target.value)}>
-          <option value="">All Categories</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      {loading ? <div className="text-gray-400 text-sm">Loading...</div> : (
-        <div className="card p-0 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-left text-xs text-gray-500">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Category</th>
-                <th className="px-4 py-3 font-medium">SKU</th>
-                <th className="px-4 py-3 font-medium">Unit</th>
-                <th className="px-4 py-3 font-medium text-right">Stock</th>
-                <th className="px-4 py-3 font-medium text-right">Cost (₹)</th>
-                <th className="px-4 py-3 font-medium text-right">Sell (₹)</th>
-                <th className="px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map(p => (
-                <tr key={p.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-medium"><a href={`/inventory/products/${p.id}`} className="text-gray-900 hover:text-emerald-600 hover:underline">{p.name}</a></td>
-                  <td className="px-4 py-2.5">
-                    {p.category && <span className={`badge ${CATEGORY_COLORS[p.category] ?? 'bg-gray-100 text-gray-700'}`}>{p.category}</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-500">{p.sku}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{p.unit}</td>
-                  <td className="px-4 py-2.5 text-right">{p.current_stock}</td>
-                  <td className="px-4 py-2.5 text-right">{Number(p.cost_price).toLocaleString('en-IN')}</td>
-                  <td className="px-4 py-2.5 text-right">{Number(p.sell_price).toLocaleString('en-IN')}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex gap-1">
-                      <button className="p-1.5 rounded hover:bg-gray-100 text-gray-500" onClick={() => startEdit(p)}><Pencil size={13} /></button>
-                      <button className="p-1.5 rounded hover:bg-red-50 text-red-400" onClick={() => handleDelete(p.id)}><Trash2 size={13} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!products.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products found.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+            </Field>
+            <Field label="SKU"><input className="input mono" value={form.sku} onChange={f('sku')} /></Field>
+            <Field label="Unit" hint="For example nos, sqm, mtr, rmt."><input className="input" value={form.unit} onChange={f('unit')} /></Field>
+            <Field label="Minimum stock" hint="Below this the item appears on the reorder list."><input className="input tabular-nums" type="number" value={form.min_stock} onChange={f('min_stock')} /></Field>
+            <Field label="Current stock" hint={editId ? 'Prefer recording a movement so the change is logged.' : undefined}><input className="input tabular-nums" type="number" value={form.current_stock} onChange={f('current_stock')} /></Field>
+            <div className="hidden sm:block" />
+            <Field label="Cost price (₹)"><input className="input tabular-nums" type="number" value={form.cost_price} onChange={f('cost_price')} /></Field>
+            <Field label="Sell price (₹)"><input className="input tabular-nums" type="number" value={form.sell_price} onChange={f('sell_price')} /></Field>
+            <Field label="Notes" className="sm:col-span-2"><textarea className="input resize-none" rows={2} value={form.notes} onChange={f('notes')} /></Field>
+          </form>
+        </Modal>
       )}
     </div>
   )

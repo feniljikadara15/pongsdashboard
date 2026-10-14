@@ -24,6 +24,13 @@ export async function POST(req: NextRequest) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, body.product_id ?? null, body.product_name ?? null, body.movement_type ?? 'IN', Number(body.quantity ?? 0), body.reference_type ?? null, body.reference_id ?? null, body.notes ?? null, body.movement_date ?? new Date().toISOString()],
   )
+  // Keep the product's stock level in step with the movement log. This used to
+  // happen client-side on one page only, so movements recorded elsewhere (e.g.
+  // the product detail page) never changed the stock.
+  if (body.product_id) {
+    const delta = String(body.movement_type ?? 'IN').toUpperCase() === 'OUT' ? -Number(body.quantity ?? 0) : Number(body.quantity ?? 0)
+    await db.execute('UPDATE inv_products SET current_stock = COALESCE(current_stock, 0) + ? WHERE id = ?', [delta, body.product_id])
+  }
   const result = await db.execute('SELECT * FROM inv_movements WHERE id = ?', [id])
   return NextResponse.json(result.rows[0], { status: 201 })
 }

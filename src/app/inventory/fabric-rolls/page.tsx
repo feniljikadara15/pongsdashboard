@@ -1,60 +1,64 @@
 export const dynamic = 'force-dynamic'
 
+import { Layers } from 'lucide-react'
 import { dbListProducts } from '@/lib/db'
+import { PageHeader, Badge, EmptyState, Stat, StatGrid } from '@/components/ui'
+import { stockState, STOCK_LABEL, STOCK_TONE } from '@/lib/inventory'
+import { fmtINR } from '@/lib/format'
 
 type Row = Record<string, unknown>
 
 export default async function FabricRollsPage() {
   const all = (await dbListProducts()) as unknown as Row[]
   const rolls = all.filter(p => String(p.category ?? '').toLowerCase().includes('fabric'))
+  const totalStock = rolls.reduce((s, p) => s + Number(p.current_stock ?? 0), 0)
+  const value = rolls.reduce((s, p) => s + Number(p.current_stock ?? 0) * Number(p.cost_price ?? 0), 0)
+  const attention = rolls.filter(p => ['out', 'low'].includes(stockState(Number(p.current_stock ?? 0), Number(p.min_stock ?? 0)))).length
+  const maxStock = Math.max(1, ...rolls.map(p => Math.max(Number(p.current_stock ?? 0), Number(p.min_stock ?? 0) * 2)))
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Fabric Roll Tracker</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{rolls.length} fabric product{rolls.length !== 1 ? 's' : ''}</p>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader title="Fabric rolls" description="Stretch ceiling fabric on hand, by product." />
 
-      <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-left text-xs text-gray-500">
-                <th className="px-4 py-3 font-semibold">Roll Name</th>
-                <th className="px-4 py-3 font-semibold">SKU</th>
-                <th className="px-4 py-3 font-semibold">Current Stock</th>
-                <th className="px-4 py-3 font-semibold">Unit</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rolls.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-400">
-                  <p className="font-medium">No fabric rolls found</p>
-                  <p className="text-xs mt-1">Add products with a Fabric category to track them here</p>
-                </td></tr>
-              ) : rolls.map(p => {
-                const stock = Number(p.current_stock ?? 0)
-                const min = Number(p.min_stock ?? 0)
-                const out = stock <= 0
-                const low = !out && min > 0 && stock <= min
-                return (
-                  <tr key={String(p.id)} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{String(p.name)}</td>
-                    <td className="px-4 py-3 text-gray-500">{String(p.sku ?? '—')}</td>
-                    <td className="px-4 py-3 text-gray-900 font-medium">{stock}</td>
-                    <td className="px-4 py-3 text-gray-500">{String(p.unit ?? 'm')}</td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${out ? 'bg-rose-50 text-rose-600' : low ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                        {out ? 'Out of Stock' : low ? 'Low' : 'In Stock'}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+      <StatGrid cols={3}>
+        <Stat label="Fabric products" value={rolls.length} />
+        <Stat label="Fabric on hand" value={`${totalStock.toLocaleString('en-IN')}`} hint={`${fmtINR(value)} at cost`} />
+        <Stat label="Below minimum" value={attention} tone={attention ? 'warning' : 'neutral'} hint={attention ? 'Reorder soon' : 'All stocked'} href="/inventory/reorder" />
+      </StatGrid>
+
+      <div className="table-wrap">
+        {rolls.length === 0 ? (
+          <EmptyState icon={Layers} title="No fabric products" description="Products whose category contains Fabric are tracked here."
+            action={<a href="/inventory/products" className="btn-secondary">Go to products</a>} />
+        ) : (
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead><tr><th>Fabric</th><th className="hidden sm:table-cell">SKU</th><th className="num">In stock</th><th className="w-[28%] hidden md:table-cell">Level against minimum</th><th>Status</th></tr></thead>
+              <tbody>
+                {rolls.map(p => {
+                  const stock = Number(p.current_stock ?? 0)
+                  const min = Number(p.min_stock ?? 0)
+                  const st = stockState(stock, min)
+                  return (
+                    <tr key={String(p.id)}>
+                      <td><a href={`/inventory/products/${p.id}`} className="font-medium text-gray-900 hover:underline">{String(p.name)}</a></td>
+                      <td className="hidden sm:table-cell mono text-xs text-gray-500">{String(p.sku || '—')}</td>
+                      <td className="num whitespace-nowrap"><span className="font-medium text-gray-900">{stock.toLocaleString('en-IN')}</span> <span className="text-xs text-gray-500">{String(p.unit ?? 'm')}</span></td>
+                      <td className="hidden md:table-cell">
+                        <div className="relative h-1.5 rounded-full bg-gray-100">
+                          <div className={`h-1.5 rounded-full ${st === 'out' || st === 'low' ? 'bg-amber-500' : 'bg-brand-500'}`} style={{ width: `${Math.min(100, (stock / maxStock) * 100)}%` }} />
+                          {min > 0 && <span className="absolute -top-1 h-3.5 w-px bg-gray-500" style={{ left: `${Math.min(100, (min / maxStock) * 100)}%` }} title={`Minimum ${min}`} />}
+                        </div>
+                      </td>
+                      <td><Badge tone={STOCK_TONE[st]} dot>{STOCK_LABEL[st]}</Badge></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rolls.length > 0 && <div className="table-footer"><span>The tick on each bar marks the minimum stock level.</span><span>{rolls.length} fabrics</span></div>}
       </div>
     </div>
   )

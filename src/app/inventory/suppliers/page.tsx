@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, Truck } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows, SearchInput, Modal, Field, Avatar } from '@/components/ui'
 
 interface Supplier {
   id: string; name: string; contact_name: string; email: string; phone: string; city: string; address: string; notes: string
@@ -13,123 +15,101 @@ export default function SuppliersPage() {
   const [form, setForm] = useState(empty())
   const [editId, setEditId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
 
   function load() {
-    fetch('/api/inventory/suppliers').then(r => r.json()).then(d => { setSuppliers(d); setLoading(false) })
+    fetch('/api/inventory/suppliers').then(r => r.json()).then(d => { setSuppliers(Array.isArray(d) ? d : []); setLoading(false) })
   }
   useEffect(() => { load() }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSaving(true)
     if (editId) {
       await fetch(`/api/inventory/suppliers/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     } else {
       await fetch('/api/inventory/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     }
+    setSaving(false)
     setShowForm(false); setForm(empty()); setEditId(null); load()
   }
-  async function handleDelete(id: string) {
-    if (!confirm('Delete supplier?')) return
-    await fetch(`/api/inventory/suppliers/${id}`, { method: 'DELETE' }); load()
+  async function handleDelete(s: Supplier) {
+    if (!confirm(`Delete the supplier "${s.name}"?`)) return
+    await fetch(`/api/inventory/suppliers/${s.id}`, { method: 'DELETE' }); load()
   }
   function openEdit(s: Supplier) {
     setForm({ name: s.name, contact_name: s.contact_name ?? '', email: s.email ?? '', phone: s.phone ?? '', city: s.city ?? '', address: s.address ?? '', notes: s.notes ?? '' })
     setEditId(s.id); setShowForm(true)
   }
+  const set = (k: keyof ReturnType<typeof empty>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  const filtered = suppliers.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()) || (s.city ?? '').toLowerCase().includes(search.toLowerCase()))
+  const q = search.toLowerCase()
+  const filtered = suppliers.filter(s => !q || s.name.toLowerCase().includes(q) || (s.city ?? '').toLowerCase().includes(q) || (s.contact_name ?? '').toLowerCase().includes(q))
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Suppliers</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{suppliers.length} suppliers</p>
-        </div>
-        <button onClick={() => { setShowForm(true); setForm(empty()); setEditId(null) }} className="btn-primary text-xs px-4 py-2">+ Add Supplier</button>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Suppliers"
+        description="Vendors for fabric, lighting and hardware."
+        actions={<button onClick={() => { setShowForm(true); setForm(empty()); setEditId(null) }} className="btn-primary"><Plus size={15} strokeWidth={2.25} /> Add supplier</button>}
+      />
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-100">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search suppliers..." className="w-full max-w-xs border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
+      <div className="table-wrap">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-3">
+          <span className="text-xs text-gray-500 pl-1">{suppliers.length} supplier{suppliers.length !== 1 ? 's' : ''}</span>
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, contact, city" />
         </div>
-        {loading ? (
-          <p className="text-sm text-gray-400 text-center py-12">Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-12">No suppliers found</p>
+        {loading ? <LoadingRows rows={4} cols={4} /> : filtered.length === 0 ? (
+          <EmptyState icon={Truck} title={suppliers.length ? 'No suppliers match' : 'No suppliers yet'}
+            action={!suppliers.length ? <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={15} /> Add supplier</button> : undefined} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-left px-4 py-2.5 font-medium">Name</th>
-                <th className="text-left px-4 py-2.5 font-medium">Contact</th>
-                <th className="text-left px-4 py-2.5 font-medium">Phone</th>
-                <th className="text-left px-4 py-2.5 font-medium">Email</th>
-                <th className="text-left px-4 py-2.5 font-medium">City</th>
-                <th className="px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(s => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{s.contact_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{s.phone ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{s.email ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{s.city ?? '—'}</td>
-                  <td className="px-4 py-3 flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(s)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                    <button onClick={() => handleDelete(s.id)} className="text-xs text-rose-500 hover:underline">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead><tr><th>Supplier</th><th className="hidden md:table-cell">Contact</th><th className="hidden lg:table-cell">Phone</th><th className="hidden lg:table-cell">Email</th><th className="hidden sm:table-cell">City</th><th className="w-20"><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>
+                {filtered.map(s => (
+                  <tr key={s.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={s.name} size={28} />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-gray-900">{s.name}</div>
+                          {s.address && <div className="truncate text-xs text-gray-500 max-w-[260px]">{s.address}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="hidden md:table-cell">{s.contact_name || '—'}</td>
+                    <td className="hidden lg:table-cell whitespace-nowrap">{s.phone ? <a href={`tel:${s.phone}`} className="hover:underline">{s.phone}</a> : '—'}</td>
+                    <td className="hidden lg:table-cell">{s.email ? <a href={`mailto:${s.email}`} className="hover:underline">{s.email}</a> : '—'}</td>
+                    <td className="hidden sm:table-cell">{s.city || '—'}</td>
+                    <td className="text-right whitespace-nowrap">
+                      <button onClick={() => openEdit(s)} className="btn-ghost btn-icon" aria-label={`Edit ${s.name}`}><Pencil size={14} /></button>
+                      <button onClick={() => handleDelete(s)} className="btn-ghost btn-icon text-gray-400 hover:text-red-700 hover:bg-red-50" aria-label={`Delete ${s.name}`}><Trash2 size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-4">{editId ? 'Edit' : 'Add'} Supplier</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                  <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Contact Person</label>
-                  <input value={form.contact_name} onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Address</label>
-                  <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 resize-none" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                  <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 resize-none" />
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2 justify-end">
-                <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-                <button type="submit" className="btn-primary text-xs px-4 py-2">{editId ? 'Save' : 'Add'} Supplier</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal title={editId ? 'Edit supplier' : 'Add supplier'} onClose={() => { setShowForm(false); setEditId(null) }}
+          footer={<>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary">Cancel</button>
+            <button type="submit" form="supplier-form" className="btn-primary" disabled={saving || !form.name}>{saving ? 'Saving…' : editId ? 'Save changes' : 'Add supplier'}</button>
+          </>}>
+          <form id="supplier-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Company name" required className="sm:col-span-2"><input required value={form.name} onChange={set('name')} className="input" autoFocus /></Field>
+            <Field label="Contact person"><input value={form.contact_name} onChange={set('contact_name')} className="input" /></Field>
+            <Field label="Phone"><input type="tel" value={form.phone} onChange={set('phone')} className="input" /></Field>
+            <Field label="Email"><input type="email" value={form.email} onChange={set('email')} className="input" /></Field>
+            <Field label="City"><input value={form.city} onChange={set('city')} className="input" /></Field>
+            <Field label="Address" className="sm:col-span-2"><textarea value={form.address} onChange={set('address')} rows={2} className="input resize-none" /></Field>
+            <Field label="Notes" className="sm:col-span-2"><textarea value={form.notes} onChange={set('notes')} rows={2} className="input resize-none" /></Field>
+          </form>
+        </Modal>
       )}
     </div>
   )

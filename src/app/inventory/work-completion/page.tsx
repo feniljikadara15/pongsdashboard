@@ -1,11 +1,15 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, ClipboardCheck } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows, StatusBadge, Modal, Field, SearchInput } from '@/components/ui'
+import { fmtINR, fmtDate } from '@/lib/format'
 
 interface WorkCompletion {
   id: string; project_name: string; client_name: string; location: string
   completion_date: string; status: string; amount: number; notes: string
 }
-const emptyForm = () => ({ project_name: '', client_name: '', location: '', completion_date: new Date().toISOString().slice(0,10), status: 'completed', amount: 0, notes: '' })
+const emptyForm = () => ({ project_name: '', client_name: '', location: '', completion_date: new Date().toISOString().slice(0, 10), status: 'completed', amount: 0, notes: '' })
+const STATUSES: [string, string][] = [['completed', 'Completed'], ['in_progress', 'In progress'], ['pending', 'Pending'], ['cancelled', 'Cancelled']]
 
 export default function WorkCompletionPage() {
   const [jobs, setJobs] = useState<WorkCompletion[]>([])
@@ -13,134 +17,97 @@ export default function WorkCompletionPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm())
   const [editId, setEditId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
 
   function load() {
-    fetch('/api/inventory/work-completions').then(r => r.json()).then(d => { setJobs(d); setLoading(false) })
+    fetch('/api/inventory/work-completions').then(r => r.json()).then(d => { setJobs(Array.isArray(d) ? d : []); setLoading(false) })
   }
   useEffect(() => { load() }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSaving(true)
     if (editId) {
       await fetch(`/api/inventory/work-completions/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     } else {
       await fetch('/api/inventory/work-completions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     }
+    setSaving(false)
     setShowForm(false); setForm(emptyForm()); setEditId(null); load()
   }
-  async function handleDelete(id: string) {
-    if (!confirm('Delete job record?')) return
-    await fetch(`/api/inventory/work-completions/${id}`, { method: 'DELETE' }); load()
+  async function handleDelete(j: WorkCompletion) {
+    if (!confirm(`Delete the job record "${j.project_name}"?`)) return
+    await fetch(`/api/inventory/work-completions/${j.id}`, { method: 'DELETE' }); load()
   }
   function openEdit(j: WorkCompletion) {
     setForm({ project_name: j.project_name, client_name: j.client_name ?? '', location: j.location ?? '', completion_date: j.completion_date ?? '', status: j.status ?? 'completed', amount: j.amount ?? 0, notes: j.notes ?? '' })
     setEditId(j.id); setShowForm(true)
   }
 
-  const statusColors: Record<string, string> = {
-    completed: 'bg-emerald-50 text-emerald-700',
-    in_progress: 'bg-blue-50 text-blue-700',
-    pending: 'bg-amber-50 text-amber-700',
-    cancelled: 'bg-gray-100 text-gray-500',
-  }
+  const q = search.toLowerCase()
+  const filtered = jobs.filter(j => !q || j.project_name.toLowerCase().includes(q) || (j.client_name ?? '').toLowerCase().includes(q) || (j.location ?? '').toLowerCase().includes(q))
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Work Completions</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{jobs.length} job records</p>
-        </div>
-        <button onClick={() => { setShowForm(true); setForm(emptyForm()); setEditId(null) }} className="btn-primary text-xs px-4 py-2">+ Add Job</button>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Work completion"
+        description="Record of finished jobs for material reconciliation."
+        actions={<button onClick={() => { setShowForm(true); setForm(emptyForm()); setEditId(null) }} className="btn-primary"><Plus size={15} strokeWidth={2.25} /> Add job</button>}
+      />
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        {loading ? (
-          <p className="text-sm text-gray-400 text-center py-12">Loading...</p>
-        ) : jobs.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-12">No job records yet</p>
+      <div className="table-wrap">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-3">
+          <span className="text-xs text-gray-500 pl-1">{jobs.length} job record{jobs.length !== 1 ? 's' : ''}</span>
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search project, client, location" />
+        </div>
+        {loading ? <LoadingRows rows={4} cols={5} /> : filtered.length === 0 ? (
+          <EmptyState icon={ClipboardCheck} title={jobs.length ? 'No jobs match' : 'No job records yet'}
+            action={!jobs.length ? <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={15} /> Add job</button> : undefined} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-left px-4 py-2.5 font-medium">Date</th>
-                <th className="text-left px-4 py-2.5 font-medium">Project</th>
-                <th className="text-left px-4 py-2.5 font-medium">Client</th>
-                <th className="text-left px-4 py-2.5 font-medium">Location</th>
-                <th className="text-right px-4 py-2.5 font-medium">Amount</th>
-                <th className="text-left px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {jobs.map(j => (
-                <tr key={j.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{j.completion_date ?? '—'}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{j.project_name}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.client_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.location ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{j.amount ? `₹${Number(j.amount).toLocaleString('en-IN')}` : '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${statusColors[j.status] ?? 'bg-gray-100 text-gray-500'}`}>{j.status}</span>
-                  </td>
-                  <td className="px-4 py-3 flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(j)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                    <button onClick={() => handleDelete(j.id)} className="text-xs text-rose-500 hover:underline">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead><tr><th>Completed</th><th>Project</th><th className="hidden md:table-cell">Location</th><th>Status</th><th className="num">Amount</th><th className="w-20"><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>
+                {filtered.map(j => (
+                  <tr key={j.id}>
+                    <td className="whitespace-nowrap tabular-nums">{fmtDate(j.completion_date)}</td>
+                    <td><div className="font-medium text-gray-900">{j.project_name}</div>{j.client_name && <div className="text-xs text-gray-500">{j.client_name}</div>}</td>
+                    <td className="hidden md:table-cell">{j.location || '—'}</td>
+                    <td><StatusBadge status={j.status} /></td>
+                    <td className="num font-medium text-gray-900">{j.amount ? fmtINR(j.amount) : '—'}</td>
+                    <td className="text-right whitespace-nowrap">
+                      <button onClick={() => openEdit(j)} className="btn-ghost btn-icon" aria-label={`Edit ${j.project_name}`}><Pencil size={14} /></button>
+                      <button onClick={() => handleDelete(j)} className="btn-ghost btn-icon text-gray-400 hover:text-red-700 hover:bg-red-50" aria-label={`Delete ${j.project_name}`}><Trash2 size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-4">{editId ? 'Edit' : 'Add'} Job Record</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Project Name *</label>
-                  <input required value={form.project_name} onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Client</label>
-                  <input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Location</label>
-                  <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Completion Date</label>
-                  <input type="date" value={form.completion_date} onChange={e => setForm(f => ({ ...f, completion_date: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Amount (₹)</label>
-                  <input type="number" min="0" step="any" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-                    <option value="completed">Completed</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="pending">Pending</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                  <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 resize-none" />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-                <button type="submit" className="btn-primary text-xs px-4 py-2">{editId ? 'Save' : 'Add'} Job</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal title={editId ? 'Edit job record' : 'Add job record'} onClose={() => { setShowForm(false); setEditId(null) }}
+          footer={<>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary">Cancel</button>
+            <button type="submit" form="job-form" className="btn-primary" disabled={saving || !form.project_name}>{saving ? 'Saving…' : editId ? 'Save changes' : 'Add job'}</button>
+          </>}>
+          <form id="job-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Project" required className="sm:col-span-2"><input required value={form.project_name} onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))} className="input" autoFocus /></Field>
+            <Field label="Client"><input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} className="input" /></Field>
+            <Field label="Location"><input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="input" /></Field>
+            <Field label="Completion date"><input type="date" value={form.completion_date} onChange={e => setForm(f => ({ ...f, completion_date: e.target.value }))} className="input" /></Field>
+            <Field label="Amount (₹)"><input type="number" min="0" step="any" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} className="input tabular-nums" /></Field>
+            <Field label="Status" className="sm:col-span-2">
+              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
+                {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </Field>
+            <Field label="Notes" className="sm:col-span-2"><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="input resize-none" /></Field>
+          </form>
+        </Modal>
       )}
     </div>
   )

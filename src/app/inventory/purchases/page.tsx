@@ -1,5 +1,8 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import { Plus, Trash2, ChevronRight, ShoppingCart } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows, SearchInput, StatusBadge, Modal, Field, Stat, StatGrid } from '@/components/ui'
+import { fmtINR, fmtDate } from '@/lib/format'
 
 interface Supplier { id: string; name: string }
 interface Product { id: string; name: string; unit: string; cost_price: number }
@@ -11,7 +14,7 @@ interface Purchase {
 }
 
 const emptyItem = (): PurchaseItem => ({ product_id: '', description: '', category: '', quantity: 1, unit: 'nos', unit_price: 0, total_price: 0 })
-const emptyForm = () => ({ purchase_number: '', supplier_id: '', supplier_name: '', purchase_date: new Date().toISOString().slice(0,10), status: 'received', notes: '', items: [emptyItem()] })
+const emptyForm = () => ({ purchase_number: '', supplier_id: '', supplier_name: '', purchase_date: new Date().toISOString().slice(0, 10), status: 'received', notes: '', items: [emptyItem()] })
 
 export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<Purchase[]>([])
@@ -21,13 +24,17 @@ export default function PurchasesPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm())
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
 
   function load() {
     Promise.all([
       fetch('/api/inventory/purchases').then(r => r.json()),
       fetch('/api/inventory/suppliers').then(r => r.json()),
       fetch('/api/inventory/products').then(r => r.json()),
-    ]).then(([p, s, pr]) => { setPurchases(p); setSuppliers(s); setProducts(pr); setLoading(false) })
+    ]).then(([p, s, pr]) => {
+      setPurchases(Array.isArray(p) ? p : []); setSuppliers(Array.isArray(s) ? s : []); setProducts(Array.isArray(pr) ? pr : []); setLoading(false)
+    })
   }
   useEffect(() => { load() }, [])
 
@@ -48,166 +55,163 @@ export default function PurchasesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSaving(true)
     const sup = suppliers.find(s => s.id === form.supplier_id)
     await fetch('/api/inventory/purchases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, supplier_name: sup?.name ?? form.supplier_name }),
     })
+    setSaving(false)
     setShowForm(false); setForm(emptyForm()); load()
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Purchases</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{purchases.length} purchase orders</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-4 py-2">+ New Purchase</button>
-      </div>
+  const q = search.toLowerCase()
+  const filtered = purchases.filter(p => !q || (p.purchase_number ?? '').toLowerCase().includes(q) || (p.supplier_name ?? '').toLowerCase().includes(q))
+  const thirty = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
+  const recent = purchases.filter(p => (p.purchase_date ?? '') >= thirty)
+  const pending = purchases.filter(p => p.status === 'pending')
+  const formTotal = form.items.reduce((s, i) => s + Number(i.total_price), 0)
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        {loading ? (
-          <p className="text-sm text-gray-400 text-center py-12">Loading...</p>
-        ) : purchases.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-12">No purchases yet</p>
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Purchases"
+        description="Purchase orders placed with suppliers."
+        actions={<button onClick={() => setShowForm(true)} className="btn-primary"><Plus size={15} strokeWidth={2.25} /> New purchase</button>}
+      />
+
+      <StatGrid cols={3}>
+        <Stat label="Spend, last 30 days" value={loading ? '—' : fmtINR(recent.reduce((s, p) => s + Number(p.total_amount || 0), 0))} hint={`${recent.length} orders`} />
+        <Stat label="Awaiting delivery" value={loading ? '—' : pending.length} hint={fmtINR(pending.reduce((s, p) => s + Number(p.total_amount || 0), 0))} tone={pending.length ? 'warning' : 'neutral'} />
+        <Stat label="All-time spend" value={loading ? '—' : fmtINR(purchases.reduce((s, p) => s + Number(p.total_amount || 0), 0))} hint={`${purchases.length} orders`} />
+      </StatGrid>
+
+      <div className="table-wrap">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-3">
+          <span className="text-xs text-gray-500 pl-1">Select an order to see its lines</span>
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search order or supplier" />
+        </div>
+        {loading ? <LoadingRows rows={4} cols={5} /> : filtered.length === 0 ? (
+          <EmptyState icon={ShoppingCart} title={purchases.length ? 'No orders match' : 'No purchases yet'}
+            action={!purchases.length ? <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={15} /> New purchase</button> : undefined} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-left px-4 py-2.5 font-medium">Date</th>
-                <th className="text-left px-4 py-2.5 font-medium">Purchase #</th>
-                <th className="text-left px-4 py-2.5 font-medium">Supplier</th>
-                <th className="text-left px-4 py-2.5 font-medium">Items</th>
-                <th className="text-right px-4 py-2.5 font-medium">Total</th>
-                <th className="text-left px-4 py-2.5 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {purchases.map(p => (
-                <>
-                  <tr key={p.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
-                    <td className="px-4 py-3 text-gray-600">{p.purchase_date}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{p.purchase_number}</td>
-                    <td className="px-4 py-3 text-gray-600">{p.supplier_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-600">{(p.items ?? []).length} items</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-900">₹{Number(p.total_amount).toLocaleString('en-IN')}</td>
-                    <td className="px-4 py-3"><span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">{p.status}</span></td>
-                  </tr>
-                  {expanded === p.id && (p.items ?? []).length > 0 && (
-                    <tr key={`${p.id}-items`}>
-                      <td colSpan={6} className="px-4 py-2 bg-gray-50">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-gray-400">
-                              <th className="text-left py-1 font-medium">Product</th>
-                              <th className="text-left py-1 font-medium">Qty</th>
-                              <th className="text-left py-1 font-medium">Unit Price</th>
-                              <th className="text-right py-1 font-medium">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {p.items.map((item, i) => (
-                              <tr key={i} className="border-t border-gray-100">
-                                <td className="py-1 text-gray-700">{item.description || '—'}</td>
-                                <td className="py-1 text-gray-700">{item.quantity} {item.unit}</td>
-                                <td className="py-1 text-gray-700">₹{Number(item.unit_price).toLocaleString('en-IN')}</td>
-                                <td className="py-1 text-right text-gray-900 font-medium">₹{Number(item.total_price).toLocaleString('en-IN')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead><tr><th className="w-8" /><th>Order</th><th>Supplier</th><th className="hidden sm:table-cell">Date</th><th className="hidden md:table-cell num">Lines</th><th>Status</th><th className="num">Total</th></tr></thead>
+              <tbody>
+                {filtered.map(p => {
+                  const open = expanded === p.id
+                  return (
+                    <Fragment key={p.id}>
+                      <tr className="cursor-pointer" onClick={() => setExpanded(open ? null : p.id)} aria-expanded={open}>
+                        <td className="pr-0"><ChevronRight size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} /></td>
+                        <td className="mono text-xs font-medium text-gray-900">{p.purchase_number || '—'}</td>
+                        <td>{p.supplier_name || '—'}</td>
+                        <td className="hidden sm:table-cell whitespace-nowrap tabular-nums">{fmtDate(p.purchase_date)}</td>
+                        <td className="hidden md:table-cell num">{(p.items ?? []).length}</td>
+                        <td><StatusBadge status={p.status} /></td>
+                        <td className="num font-medium text-gray-900">{fmtINR(p.total_amount)}</td>
+                      </tr>
+                      {open && (
+                        <tr className="bg-gray-50/70 hover:bg-gray-50/70">
+                          <td />
+                          <td colSpan={6} className="py-3">
+                            {(p.items ?? []).length === 0 ? <p className="text-xs text-gray-500">No line items on this order.</p> : (
+                              <table className="w-full text-xs">
+                                <thead><tr className="text-gray-500"><th className="text-left font-medium pb-1.5">Item</th><th className="text-right font-medium pb-1.5">Quantity</th><th className="text-right font-medium pb-1.5">Unit price</th><th className="text-right font-medium pb-1.5">Amount</th></tr></thead>
+                                <tbody>
+                                  {p.items.map((item, i) => (
+                                    <tr key={i} className="border-t border-gray-200/70">
+                                      <td className="py-1.5 text-gray-800">{item.description || '—'}</td>
+                                      <td className="py-1.5 text-right tabular-nums text-gray-700">{item.quantity} {item.unit}</td>
+                                      <td className="py-1.5 text-right tabular-nums text-gray-700">{fmtINR(item.unit_price)}</td>
+                                      <td className="py-1.5 text-right tabular-nums font-medium text-gray-900">{fmtINR(item.total_price)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                            {p.notes && <p className="mt-2 text-xs text-gray-500">{p.notes}</p>}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-4">New Purchase</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Purchase # *</label>
-                  <input required value={form.purchase_number} onChange={e => setForm(f => ({ ...f, purchase_number: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
-                  <input type="date" required value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Supplier</label>
-                  <select value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-                    <option value="">Select supplier</option>
-                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-                    <option value="received">Received</option>
-                    <option value="pending">Pending</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
+        <Modal title="New purchase order" onClose={() => { setShowForm(false); setForm(emptyForm()) }} width="max-w-3xl"
+          footer={<>
+            <span className="mr-auto text-[13px] text-gray-600">Total <span className="ml-1 font-semibold text-gray-900 tabular-nums">{fmtINR(formTotal)}</span></span>
+            <button type="button" onClick={() => { setShowForm(false); setForm(emptyForm()) }} className="btn-secondary">Cancel</button>
+            <button type="submit" form="purchase-form" className="btn-primary" disabled={saving || !form.purchase_number}>{saving ? 'Saving…' : 'Save purchase'}</button>
+          </>}>
+          <form id="purchase-form" onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <Field label="Order number" required>
+                <input required value={form.purchase_number} onChange={e => setForm(f => ({ ...f, purchase_number: e.target.value }))} className="input mono" placeholder="PO-2043" autoFocus />
+              </Field>
+              <Field label="Date" required>
+                <input type="date" required value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} className="input" />
+              </Field>
+              <Field label="Supplier">
+                <select value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))} className="select">
+                  <option value="">Select supplier</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Status">
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
+                  <option value="received">Received</option>
+                  <option value="pending">Pending</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </Field>
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">Line Items</label>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))} className="text-xs text-emerald-600 hover:underline">+ Add Item</button>
-                </div>
-                <div className="space-y-2">
-                  {form.items.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-4">
-                        <select value={item.product_id} onChange={e => updateItem(idx, 'product_id', e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-400">
-                          <option value="">Select product</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </div>
-                      <div className="col-span-3">
-                        <input placeholder="Description" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-400" />
-                      </div>
-                      <div className="col-span-1">
-                        <input type="number" min="0" step="any" placeholder="Qty" value={item.quantity} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-400" />
-                      </div>
-                      <div className="col-span-2">
-                        <input type="number" min="0" step="any" placeholder="Unit price" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-400" />
-                      </div>
-                      <div className="col-span-1 text-xs text-gray-500 pb-1.5 text-right">
-                        ₹{Number(item.total_price).toLocaleString('en-IN')}
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <button type="button" onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))} className="text-rose-400 hover:text-rose-600 text-xs pb-1.5">✕</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-right text-sm font-semibold text-gray-900 mt-2">
-                  Total: ₹{form.items.reduce((s, i) => s + Number(i.total_price), 0).toLocaleString('en-IN')}
-                </div>
+            <div className="rounded-md border border-gray-200">
+              <div className="flex items-center justify-between px-3 h-10 border-b border-gray-200 bg-gray-50 rounded-t-md">
+                <span className="text-xs font-medium text-gray-700">Order lines</span>
+                <button type="button" onClick={() => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }))} className="btn-ghost btn-xs"><Plus size={13} /> Add line</button>
               </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px] min-w-[620px]">
+                  <thead><tr className="text-xs text-gray-500"><th className="text-left font-medium px-3 pt-2">Product</th><th className="text-left font-medium px-2 pt-2">Description</th><th className="text-right font-medium px-2 pt-2 w-20">Qty</th><th className="text-right font-medium px-2 pt-2 w-28">Unit price</th><th className="text-right font-medium px-2 pt-2 w-28">Amount</th><th className="w-10" /></tr></thead>
+                  <tbody>
+                    {form.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-1.5">
+                          <select value={item.product_id} onChange={e => updateItem(idx, 'product_id', e.target.value)} className="select h-8 text-xs" aria-label="Product">
+                            <option value="">Select product</option>
+                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1.5"><input placeholder="Description" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} className="input h-8 text-xs" aria-label="Description" /></td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="any" value={item.quantity} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))} className="input h-8 text-xs text-right tabular-nums" aria-label="Quantity" /></td>
+                        <td className="px-2 py-1.5"><input type="number" min="0" step="any" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', Number(e.target.value))} className="input h-8 text-xs text-right tabular-nums" aria-label="Unit price" /></td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-medium text-gray-900">{fmtINR(item.total_price)}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          <button type="button" onClick={() => setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))} disabled={form.items.length === 1}
+                            className="btn-ghost btn-icon h-7 w-7 text-gray-400 hover:text-red-700" aria-label="Remove line"><Trash2 size={13} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 resize-none" />
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={() => { setShowForm(false); setForm(emptyForm()) }} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-                <button type="submit" className="btn-primary text-xs px-4 py-2">Save Purchase</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <Field label="Notes">
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="input resize-none" />
+            </Field>
+          </form>
+        </Modal>
       )}
     </div>
   )

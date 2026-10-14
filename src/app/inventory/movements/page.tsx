@@ -1,5 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { Plus, ArrowLeftRight } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows, Badge, Modal, Field } from '@/components/ui'
+import { fmtDate } from '@/lib/format'
 
 interface Movement {
   id: string; product_id: string; product_name: string; movement_type: string
@@ -7,7 +10,7 @@ interface Movement {
 }
 interface Product { id: string; name: string; unit: string }
 
-const emptyForm = () => ({ product_id: '', product_name: '', movement_type: 'IN', quantity: 1, reference_type: '', reference_id: '', notes: '', movement_date: new Date().toISOString().slice(0,10) })
+const emptyForm = () => ({ product_id: '', product_name: '', movement_type: 'IN', quantity: 1, reference_type: '', reference_id: '', notes: '', movement_date: new Date().toISOString().slice(0, 10) })
 
 export default function MovementsPage() {
   const [movements, setMovements] = useState<Movement[]>([])
@@ -17,33 +20,27 @@ export default function MovementsPage() {
   const [form, setForm] = useState(emptyForm())
   const [filterType, setFilterType] = useState('')
   const [filterProduct, setFilterProduct] = useState('')
+  const [saving, setSaving] = useState(false)
 
   function load() {
     Promise.all([
       fetch('/api/inventory/movements').then(r => r.json()),
       fetch('/api/inventory/products').then(r => r.json()),
-    ]).then(([m, p]) => { setMovements(m); setProducts(p); setLoading(false) })
+    ]).then(([m, p]) => { setMovements(Array.isArray(m) ? m : []); setProducts(Array.isArray(p) ? p : []); setLoading(false) })
   }
   useEffect(() => { load() }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setSaving(true)
     const prod = products.find(p => p.id === form.product_id)
+    // The movements API records the movement and adjusts the product's stock.
     await fetch('/api/inventory/movements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, product_name: prod?.name ?? form.product_name }),
     })
-    // Update product stock
-    if (prod) {
-      const stockRes = await fetch(`/api/inventory/products/${form.product_id}`).then(r => r.json())
-      const current = Number(stockRes.current_stock ?? 0)
-      const newStock = form.movement_type === 'IN' ? current + Number(form.quantity) : current - Number(form.quantity)
-      await fetch(`/api/inventory/products/${form.product_id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...stockRes, current_stock: newStock }),
-      })
-    }
+    setSaving(false)
     setShowForm(false); setForm(emptyForm()); load()
   }
 
@@ -52,109 +49,86 @@ export default function MovementsPage() {
     if (filterProduct && m.product_id !== filterProduct) return false
     return true
   })
+  const unitOf = (id: string) => products.find(p => p.id === id)?.unit ?? ''
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Stock Movements</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{movements.length} total movements</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-4 py-2">+ Record Movement</button>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Stock movements"
+        description="Every unit received into or issued from stock."
+        actions={<button onClick={() => setShowForm(true)} className="btn-primary"><Plus size={15} strokeWidth={2.25} /> Record movement</button>}
+      />
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-100 flex gap-3">
-          <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-            <option value="">All Products</option>
+      <div className="table-wrap">
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3">
+          <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="select h-8 w-60 text-xs" aria-label="Product">
+            <option value="">All products</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-            <option value="">All Types</option>
-            <option value="IN">IN</option>
-            <option value="OUT">OUT</option>
-          </select>
+          <div className="segmented" role="radiogroup" aria-label="Direction">
+            {[['', 'All'], ['IN', 'Received'], ['OUT', 'Issued']].map(([v, l]) => (
+              <button key={v} data-active={filterType === v} onClick={() => setFilterType(v)}>{l}</button>
+            ))}
+          </div>
+          <span className="ml-auto text-xs text-gray-500">{filtered.length} of {movements.length}</span>
         </div>
-        {loading ? (
-          <p className="text-sm text-gray-400 text-center py-12">Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-12">No movements found</p>
+        {loading ? <LoadingRows rows={6} cols={5} /> : filtered.length === 0 ? (
+          <EmptyState icon={ArrowLeftRight} title={movements.length ? 'No movements match these filters' : 'No movements recorded'} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-left px-4 py-2.5 font-medium">Date</th>
-                <th className="text-left px-4 py-2.5 font-medium">Product</th>
-                <th className="text-left px-4 py-2.5 font-medium">Type</th>
-                <th className="text-right px-4 py-2.5 font-medium">Qty</th>
-                <th className="text-left px-4 py-2.5 font-medium">Reference</th>
-                <th className="text-left px-4 py-2.5 font-medium">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600">{String(m.movement_date).slice(0,10)}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{m.product_name ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${m.movement_type === 'IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'}`}>
-                      {m.movement_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{m.quantity}</td>
-                  <td className="px-4 py-3 text-gray-600">{m.reference_type ? `${m.reference_type}${m.reference_id ? ` #${m.reference_id}` : ''}` : '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{m.notes ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Date</th><th>Product</th><th>Direction</th><th className="num">Quantity</th><th className="hidden md:table-cell">Reference</th><th className="hidden lg:table-cell">Notes</th></tr></thead>
+              <tbody>
+                {filtered.map(m => (
+                  <tr key={m.id}>
+                    <td className="whitespace-nowrap tabular-nums">{fmtDate(String(m.movement_date).slice(0, 10))}</td>
+                    <td>{m.product_id ? <a href={`/inventory/products/${m.product_id}`} className="font-medium text-gray-900 hover:underline">{m.product_name ?? '—'}</a> : <span className="font-medium text-gray-900">{m.product_name ?? '—'}</span>}</td>
+                    <td><Badge tone={m.movement_type === 'IN' ? 'success' : 'danger'}>{m.movement_type === 'IN' ? 'Received' : 'Issued'}</Badge></td>
+                    <td className="num font-medium text-gray-900 whitespace-nowrap">{m.movement_type === 'OUT' ? '−' : '+'}{m.quantity} <span className="text-xs font-normal text-gray-500">{unitOf(m.product_id)}</span></td>
+                    <td className="hidden md:table-cell text-gray-600">{m.reference_type ? `${m.reference_type}${m.reference_id ? ` #${m.reference_id}` : ''}` : '—'}</td>
+                    <td className="hidden lg:table-cell text-gray-500">{m.notes || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-4">Record Stock Movement</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Product *</label>
-                <select required value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-                  <option value="">Select product</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Type *</label>
-                  <select value={form.movement_type} onChange={e => setForm(f => ({ ...f, movement_type: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400">
-                    <option value="IN">IN (Stock In)</option>
-                    <option value="OUT">OUT (Stock Out)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Quantity *</label>
-                  <input type="number" required min="0" step="any" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Date *</label>
-                  <input type="date" required value={form.movement_date} onChange={e => setForm(f => ({ ...f, movement_date: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Reference Type</label>
-                  <input placeholder="e.g. Purchase, Sale" value={form.reference_type} onChange={e => setForm(f => ({ ...f, reference_type: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-400 resize-none" />
-              </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={() => { setShowForm(false); setForm(emptyForm()) }} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-                <button type="submit" className="btn-primary text-xs px-4 py-2">Record</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal title="Record movement" onClose={() => { setShowForm(false); setForm(emptyForm()) }} width="max-w-md"
+          footer={<>
+            <button type="button" onClick={() => { setShowForm(false); setForm(emptyForm()) }} className="btn-secondary">Cancel</button>
+            <button type="submit" form="mv-form" className="btn-primary" disabled={saving || !form.product_id || !form.quantity}>{saving ? 'Saving…' : 'Record'}</button>
+          </>}>
+          <form id="mv-form" onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Product" required>
+              <select required value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} className="select" autoFocus>
+                <option value="">Select product</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <div className="segmented w-full" role="radiogroup" aria-label="Direction">
+              {[['IN', 'Received into stock'], ['OUT', 'Issued from stock']].map(([v, l]) => (
+                <button key={v} type="button" className="flex-1" data-active={form.movement_type === v} onClick={() => setForm(f => ({ ...f, movement_type: v }))}>{l}</button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Quantity" required>
+                <input type="number" required min="0" step="any" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) }))} className="input tabular-nums" />
+              </Field>
+              <Field label="Date" required>
+                <input type="date" required value={form.movement_date} onChange={e => setForm(f => ({ ...f, movement_date: e.target.value }))} className="input" />
+              </Field>
+            </div>
+            <Field label="Reference" hint="Purchase order, project or reason.">
+              <input value={form.reference_type} onChange={e => setForm(f => ({ ...f, reference_type: e.target.value }))} className="input" />
+            </Field>
+            <Field label="Notes">
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="input resize-none" />
+            </Field>
+          </form>
+        </Modal>
       )}
     </div>
   )

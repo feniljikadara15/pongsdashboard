@@ -1,15 +1,24 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShoppingCart, ArrowLeftRight } from 'lucide-react'
+import { ShoppingCart, ArrowDownLeft, ArrowUpRight, Activity } from 'lucide-react'
+import { PageHeader, EmptyState, LoadingRows } from '@/components/ui'
+import { fmtINR, fmtDate } from '@/lib/format'
 
 interface ActivityItem {
-  id: string; type: 'purchase' | 'movement'; title: string; date: string; details: string
+  id: string; kind: 'purchase' | 'in' | 'out'; title: string; date: string; details: string; href?: string
+}
+
+const ICON = {
+  purchase: { icon: ShoppingCart, cls: 'bg-sky-50 text-sky-700' },
+  in: { icon: ArrowDownLeft, cls: 'bg-brand-50 text-brand-700' },
+  out: { icon: ArrowUpRight, cls: 'bg-gray-100 text-gray-700' },
 }
 
 export default function ActivityPage() {
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<'all' | 'purchase' | 'movement'>('all')
 
   useEffect(() => {
     Promise.all([
@@ -18,48 +27,84 @@ export default function ActivityPage() {
     ]).then(([purchases, movements]) => {
       const items: ActivityItem[] = [
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...purchases.map((p: any) => ({
+        ...(Array.isArray(purchases) ? purchases : []).map((p: any) => ({
           id: `p-${p.id}`,
-          type: 'purchase' as const,
-          title: `Purchase ${p.purchase_number}`,
+          kind: 'purchase' as const,
+          title: `Purchase order ${p.purchase_number || ''}`.trim(),
           date: p.purchase_date ?? p.created_at ?? '',
-          details: `${p.supplier_name ?? 'Unknown supplier'} · ₹${Number(p.total_amount).toLocaleString('en-IN')}`,
+          details: `${p.supplier_name ?? 'Unknown supplier'} · ${fmtINR(Number(p.total_amount))} · ${p.status ?? ''}`,
+          href: '/inventory/purchases',
         })),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...movements.map((m: any) => ({
+        ...(Array.isArray(movements) ? movements : []).map((m: any) => ({
           id: `m-${m.id}`,
-          type: 'movement' as const,
-          title: `${m.movement_type} Movement — ${m.product_name ?? 'Unknown'}`,
+          kind: (m.movement_type === 'OUT' ? 'out' : 'in') as 'in' | 'out',
+          title: `${m.movement_type === 'OUT' ? 'Issued' : 'Received'} ${m.quantity} · ${m.product_name ?? 'Unknown product'}`,
           date: m.movement_date ?? m.created_at ?? '',
-          details: `Qty: ${m.quantity}${m.reference_type ? ` · Ref: ${m.reference_type}` : ''}${m.notes ? ` · ${m.notes}` : ''}`,
+          details: [m.reference_type, m.notes].filter(Boolean).join(' · ') || 'No reference',
+          href: m.product_id ? `/inventory/products/${m.product_id}` : undefined,
         })),
       ]
-      items.sort((a, b) => b.date.localeCompare(a.date))
+      items.sort((a, b) => String(b.date).localeCompare(String(a.date)))
       setActivity(items)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
 
+  const filtered = activity.filter(a => filter === 'all' || (filter === 'purchase' ? a.kind === 'purchase' : a.kind !== 'purchase'))
+  // Group by day for a readable feed.
+  const groups: { day: string; items: ActivityItem[] }[] = []
+  for (const a of filtered) {
+    const day = String(a.date).slice(0, 10)
+    const g = groups[groups.length - 1]
+    if (g && g.day === day) g.items.push(a)
+    else groups.push({ day, items: [a] })
+  }
+
   return (
-    <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-5">Activity Feed</h1>
-      {loading ? <div className="text-gray-400 text-sm">Loading...</div> : (
-        <div className="space-y-2">
-          {activity.map(item => (
-            <div key={item.id} className="card flex items-start gap-3 py-3">
-              <div className={`mt-0.5 p-2 rounded-lg ${item.type === 'purchase' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'}`}>
-                {item.type === 'purchase' ? <ShoppingCart size={14} /> : <ArrowLeftRight size={14} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{item.details}</p>
-              </div>
-              <p className="text-xs text-gray-400 whitespace-nowrap">{item.date ? String(item.date).slice(0, 10) : ''}</p>
-            </div>
-          ))}
-          {!activity.length && <p className="text-gray-400 text-sm text-center py-12">No activity yet.</p>}
-        </div>
-      )}
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Inventory activity"
+        description="Purchases and stock movements, newest first."
+        actions={
+          <div className="segmented">
+            <button data-active={filter === 'all'} onClick={() => setFilter('all')}>All</button>
+            <button data-active={filter === 'purchase'} onClick={() => setFilter('purchase')}>Purchases</button>
+            <button data-active={filter === 'movement'} onClick={() => setFilter('movement')}>Movements</button>
+          </div>
+        }
+      />
+
+      <div className="card max-w-4xl">
+        {loading ? <LoadingRows rows={6} cols={3} /> : groups.length === 0 ? (
+          <EmptyState icon={Activity} title="No activity yet" description="Purchases and stock movements will appear here." />
+        ) : groups.map(g => (
+          <div key={g.day}>
+            <p className="sticky top-14 z-10 border-b border-gray-100 bg-gray-50/95 px-5 py-2 text-xs font-medium text-gray-500 backdrop-blur first:rounded-t-lg">{fmtDate(g.day)}</p>
+            <ul className="divide-y divide-gray-100">
+              {g.items.map(item => {
+                const { icon: Icon, cls } = ICON[item.kind]
+                const body = (
+                  <>
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${cls}`}><Icon size={15} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-gray-900">{item.title}</span>
+                      <span className="block truncate text-xs text-gray-500">{item.details}</span>
+                    </span>
+                  </>
+                )
+                return (
+                  <li key={item.id}>
+                    {item.href
+                      ? <a href={item.href} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">{body}</a>
+                      : <div className="flex items-center gap-3 px-5 py-3">{body}</div>}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
