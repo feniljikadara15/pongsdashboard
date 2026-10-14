@@ -26,6 +26,7 @@ export default function HomePage() {
   const [quotes, setQuotes] = useState<Quote[] | null>(null)
   const [projects, setProjects] = useState<Row[] | null>(null)
   const [lowStock, setLowStock] = useState<Row[] | null>(null)
+  const [loadError, setLoadError] = useState('')
 
   const canQuotes = can(me, 'quotes', 'view')
   const canProjects = can(me, 'projects', 'view')
@@ -33,7 +34,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!me) return
-    if (canQuotes) fetch('/api/quotes').then(r => r.json()).then(d => setQuotes(Array.isArray(d) ? d : [])).catch(() => setQuotes([]))
+    if (canQuotes) fetch('/api/quotes').then(async r => {
+      const d = await r.json().catch(() => null)
+      if (!r.ok) setLoadError((d && d.error) ? String(d.error) : `The server returned ${r.status}.`)
+      setQuotes(Array.isArray(d) ? d : [])
+    }).catch(() => { setLoadError('Could not reach the server.'); setQuotes([]) })
     if (canProjects) fetch('/api/projects').then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => setProjects([]))
     if (canInventory) fetch('/api/notifications').then(r => r.json()).then(d => setLowStock(d?.lowStock ?? [])).catch(() => setLowStock([]))
   }, [me, canQuotes, canProjects, canInventory])
@@ -71,6 +76,12 @@ export default function HomePage() {
         description={fmtDateLong(new Date(), { weekday: true })}
         actions={canQuotes ? <a href="/quotes/new" className="btn-primary"><Plus size={15} strokeWidth={2.25} /> New quote</a> : undefined}
       />
+
+      {loadError && (
+        <div className="alert-error mb-6" role="alert">
+          <span><span className="font-medium">Some data could not be loaded.</span> {loadError}</span>
+        </div>
+      )}
 
       <StatGrid>
         {canQuotes && (

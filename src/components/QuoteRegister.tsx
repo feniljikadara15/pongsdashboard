@@ -34,6 +34,7 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | 'all'>('all')
   const [companyFilter, setCompanyFilter] = useState<string>('all')
@@ -46,9 +47,20 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
 
   const fetchQuotes = useCallback(async (q = '', company = 'all') => {
     setLoading(true)
-    const res = await fetch(`/api/quotes?q=${encodeURIComponent(q)}&company=${encodeURIComponent(company)}`)
-    const data = await res.json()
-    setQuotes(Array.isArray(data) ? data : [])
+    try {
+      const res = await fetch(`/api/quotes?q=${encodeURIComponent(q)}&company=${encodeURIComponent(company)}`)
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setLoadError((data && data.error) ? String(data.error) : `The server returned ${res.status}.`)
+        setQuotes([])
+      } else {
+        setLoadError('')
+        setQuotes(Array.isArray(data) ? data : [])
+      }
+    } catch {
+      setLoadError('Could not reach the server.')
+      setQuotes([])
+    }
     setLoading(false)
   }, [])
 
@@ -176,6 +188,12 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
 
         {loading ? (
           <LoadingRows rows={6} cols={5} />
+        ) : loadError ? (
+          <div className="p-5">
+            <div className="alert-error" role="alert">
+              <span><span className="font-medium">Quotations could not be loaded.</span> {loadError}</span>
+            </div>
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={FileText}

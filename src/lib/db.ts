@@ -82,10 +82,19 @@ export async function initQuotesTable() {
   // Backfill: grand_total was never computed on save, so quotes created in the
   // app were stored at 0 and reports, client totals and converted projects
   // read 0. Recompute from the stored items wherever the total is missing.
-  const missing = await db.execute(`SELECT * FROM pongs_quotes WHERE grand_total IS NULL OR grand_total = 0`)
-  for (const row of missing.rows) {
-    const total = computeGrandTotal(rowToQuote(row))
-    if (total > 0) await db.execute('UPDATE pongs_quotes SET grand_total = ? WHERE id = ?', [total, String(row.id)])
+  // Best effort: a malformed legacy row must never block the quotes module.
+  try {
+    const missing = await db.execute(`SELECT * FROM pongs_quotes WHERE grand_total IS NULL OR grand_total = 0`)
+    for (const row of missing.rows) {
+      try {
+        const total = computeGrandTotal(rowToQuote(row))
+        if (total > 0) await db.execute('UPDATE pongs_quotes SET grand_total = ? WHERE id = ?', [total, String(row.id)])
+      } catch (e) {
+        console.error('grand_total backfill skipped quote', String(row.id), e)
+      }
+    }
+  } catch (e) {
+    console.error('grand_total backfill failed', e)
   }
   _quotesInit = true
 }
