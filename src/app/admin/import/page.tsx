@@ -1,7 +1,7 @@
 'use client'
 import Gate from '@/components/Gate'
-import { useState } from 'react'
-import { CheckCircle2, DatabaseZap, Loader2, PlugZap } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle2, DatabaseZap, Loader2, PlugZap, FlaskConical, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui'
 
 const SOURCES = [
@@ -9,6 +9,67 @@ const SOURCES = [
   { label: 'Suppliers', detail: 'Company and contact details' },
   { label: 'Customers', detail: 'Imported into Clients' },
 ]
+
+const SAMPLE_LABELS: Record<string, string> = {
+  pongs_quotes: 'quotes', clients: 'clients', projects: 'projects', inv_products: 'products',
+  inv_suppliers: 'suppliers', inv_purchases: 'purchase orders', inv_movements: 'stock movements', inv_work_completions: 'job records',
+}
+
+// Load or remove demonstration records. Sample rows are tagged by id, so
+// removing them never affects real data.
+function SampleDataCard() {
+  const [counts, setCounts] = useState<Record<string, number> | null>(null)
+  const [busy, setBusy] = useState<'load' | 'remove' | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/admin/sample-data').then(r => r.json()).then(d => setCounts(d.counts ?? null)).catch(() => {})
+  }, [])
+
+  const total = counts ? Object.values(counts).reduce((s, n) => s + n, 0) : 0
+
+  async function run(method: 'POST' | 'DELETE') {
+    if (method === 'DELETE' && !confirm('Remove all sample records? Real records are not affected.')) return
+    setBusy(method === 'POST' ? 'load' : 'remove'); setError('')
+    const r = await fetch('/api/admin/sample-data', { method })
+    const d = await r.json().catch(() => ({}))
+    setBusy(null)
+    if (!r.ok) { setError(d.error ?? `The server returned ${r.status}.`); return }
+    setCounts(d.counts ?? null)
+  }
+
+  return (
+    <section className="card mt-4 max-w-5xl">
+      <div className="card-header">
+        <h2 className="card-title">Sample data</h2>
+        {total > 0 && <span className="badge-warning">Sample data loaded</span>}
+      </div>
+      <div className="p-5 space-y-4">
+        <p className="text-[13px] text-gray-600">
+          Fill the workspace with realistic demonstration records (clients, quotes, projects, inventory and purchases) to review the app.
+          Sample records are tagged, so removing them never touches real data. Quote numbers use SAMPLE-A, SAMPLE-B and so on, so real numbering is unaffected.
+        </p>
+        {total > 0 && counts && (
+          <p className="text-xs text-gray-500 tabular-nums">
+            Currently loaded: {Object.entries(counts).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${SAMPLE_LABELS[k] ?? k}`).join(', ')}.
+          </p>
+        )}
+        {error && <div className="alert-error">{error}</div>}
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => run('POST')} disabled={!!busy} className="btn-primary">
+            {busy === 'load' ? <><Loader2 size={14} className="animate-spin" /> Loading…</> : <><FlaskConical size={14} /> {total > 0 ? 'Reload sample data' : 'Load sample data'}</>}
+          </button>
+          {total > 0 && (
+            <button onClick={() => run('DELETE')} disabled={!!busy} className="btn-secondary">
+              {busy === 'remove' ? <><Loader2 size={14} className="animate-spin" /> Removing…</> : <><Trash2 size={14} /> Remove sample data</>}
+            </button>
+          )}
+          {total > 0 && <a href="/" className="btn-ghost">Open dashboard</a>}
+        </div>
+      </div>
+    </section>
+  )
+}
 
 function ImportPage() {
   const [importing, setImporting] = useState(false)
@@ -44,7 +105,7 @@ function ImportPage() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Airtable import" description="Copy records from the Airtable workspace into this system." />
+      <PageHeader title="Data import" description="Copy records from the Airtable workspace, or load sample data to review the app." />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] max-w-5xl">
         <section className="card">
@@ -109,6 +170,8 @@ function ImportPage() {
           <p>Afterwards, review the results in <a href="/inventory/products" className="font-medium text-gray-900 underline-offset-2 hover:underline">Products</a>, <a href="/inventory/suppliers" className="font-medium text-gray-900 underline-offset-2 hover:underline">Suppliers</a> and <a href="/clients" className="font-medium text-gray-900 underline-offset-2 hover:underline">Clients</a>.</p>
         </aside>
       </div>
+
+      <SampleDataCard />
     </div>
   )
 }

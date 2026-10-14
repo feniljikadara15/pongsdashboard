@@ -66,7 +66,7 @@ const ADMIN: NavItem[] = [
     ],
   },
   { href: '/admin/access-requests', label: 'Access requests', icon: Inbox, admin: true },
-  { href: '/admin/import', label: 'Airtable import', icon: DatabaseZap, admin: true },
+  { href: '/admin/import', label: 'Data import', icon: DatabaseZap, admin: true },
 ]
 
 // Routes that render without the application chrome.
@@ -95,7 +95,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   suppliers: 'Suppliers', purchases: 'Purchases', movements: 'Stock movements', reorder: 'Reorder alerts',
   'work-completion': 'Work completion', activity: 'Activity', clients: 'Clients', finance: 'Finance',
   analytics: 'Analytics', users: 'Team & access', permissions: 'Access overview', admin: 'Admin',
-  'access-requests': 'Access requests', import: 'Airtable import',
+  'access-requests': 'Access requests', import: 'Data import',
 }
 
 function breadcrumbs(pathname: string) {
