@@ -1,6 +1,8 @@
 'use client'
+import { Lock } from 'lucide-react'
 import { useMe, can, type Me } from '@/lib/useMe'
 import type { ModuleName } from '@/lib/permissions'
+import { EmptyState, PageLoading } from '@/components/ui'
 
 // Client-side access gate for whole pages. This is a UX layer only — the real
 // enforcement lives in the API routes (every data call is authorized server-
@@ -16,25 +18,19 @@ export default function Gate({
 }) {
   const { me, loading } = useMe()
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-64 text-sm text-stone-400">Loading…</div>
-  }
+  if (loading) return <PageLoading />
 
   const allowed = !me ? false : admin ? me.isAdmin : module ? can(me, module, 'view') : true
 
   if (!allowed) {
     return (
-      <div className="py-24 text-center animate-fade-in">
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 mb-3">
-          Restricted
-        </div>
-        <p className="font-bold text-stone-900 text-lg">
-          You don’t have access to this section
-        </p>
-        <p className="text-sm text-stone-500 mt-2">
-          Ask an administrator to grant you permission.
-        </p>
-        <a href="/quotes" className="btn-primary mt-6 inline-flex">Go to Quotes</a>
+      <div className="card mt-8">
+        <EmptyState
+          icon={Lock}
+          title="You don't have access to this section"
+          description="Ask an administrator to grant you permission for this module."
+          action={<a href="/quotes" className="btn-secondary">Go to quotes</a>}
+        />
       </div>
     )
   }

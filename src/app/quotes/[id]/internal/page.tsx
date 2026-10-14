@@ -1,214 +1,158 @@
-import { dbGetQuote } from "@/lib/db"
+import { dbGetQuote, dbGetProjectIdForQuote } from "@/lib/db"
 import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, round2 } from '@/lib/calculations'
-import { Edit, Eye, Users } from 'lucide-react'
-import PrintButton from '@/components/PrintButton'
+import QuoteHeader from '@/components/QuoteHeader'
 
+const LIGHT_LABEL: Record<string, string> = {
+  single_color: 'Single colour', single_color_dimmable: 'Single colour dimmable', tunable: 'Tunable white',
+  tunable_dali: 'Tunable, DALI at site', rgb: 'RGB', rgbw: 'RGBW / NW / WW',
+}
+
+// Internal cost review: every line at the quoted rate, item by item, in the
+// order the materials will be ordered. Printable for the operations team.
 export default async function InternalPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
   if (!(await canAccessQuote(quote.ownerEmail))) notFound()
+  const projectId = await dbGetProjectIdForQuote(quote.id)
 
   const bd = calculateQuote(quote)
-
-  const dateStr = new Date(quote.date).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })
-
-  const tierLabel = quote.priceTier === 'manual' ? 'Manual' : quote.priceTier.toUpperCase()
+  const dateStr = new Date(quote.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      {/* Nav */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
-          <a href="/" className="hover:text-slate-600">Quotes</a>
-          <span>/</span>
-          <span className="text-slate-600">{quote.quoteNumber}</span>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Internal Cost Review</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs gap-1.5">
-            <Users size={14} /> Team View
-          </a>
-          <a href={`/quotes/${quote.id}/client`} className="btn-secondary text-xs gap-1.5">
-            <Eye size={14} /> Client View
-          </a>
-          <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
-            <Edit size={14} /> Edit
-          </a>
-          <PrintButton />
-        </div>
+    <div className="animate-fade-in">
+      <QuoteHeader quote={quote} active="internal" projectId={projectId} />
+
+      {/* Print-only heading */}
+      <div className="hidden print:block mb-6">
+        <p className="text-xs text-gray-500">Internal cost review · {quote.quoteNumber} · {dateStr}</p>
+        <h1 className="text-xl font-semibold">{quote.clientName}</h1>
+        <p className="text-sm text-gray-600">{[quote.projectName, quote.location].filter(Boolean).join(' · ')}</p>
       </div>
 
-      {/* Header */}
-      <div className="border border-slate-300 rounded-lg overflow-hidden mb-6">
-        <div className="bg-slate-800 text-white px-6 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Internal Cost Review · {tierLabel}
-            </p>
-            <h1 className="text-xl font-bold">{quote.clientName}</h1>
-            {quote.projectName && <p className="text-slate-300 text-sm">{quote.projectName}</p>}
-            {quote.location && <p className="text-slate-400 text-xs">{quote.location}</p>}
-          </div>
-          <div className="text-right text-sm text-slate-300">
-            <p>Date: {dateStr}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{quote.quoteNumber}</p>
-          </div>
-        </div>
-      </div>
+      <div className="space-y-4">
+        {bd.itemBreakdowns.map((item, idx) => {
+          const d = item.item.dimensions as unknown as Record<string, number>
+          const dimStr = item.item.shape === 'circle'
+            ? `Ø ${d.diameter} ${item.item.unit}`
+            : `${d.dim1 ?? 0} × ${d.dim2 ?? 0} ${item.item.unit}`
+          const isCustom = item.fabricDetail.panels.length === 0 && !item.ledDetail
+          const sqft = round2(item.areaM2 * 10.7639)
 
-      {/* Per-item breakdowns */}
-      {bd.itemBreakdowns.map((item, idx) => {
-        const d = item.item.dimensions as unknown as Record<string, number>
-        const dimStr = item.item.shape === 'circle'
-          ? `Ø${d.diameter} ${item.item.unit}`
-          : `${d.dim1 ?? 0} × ${d.dim2 ?? 0} ${item.item.unit}`
-        const isCustom = item.fabricDetail.panels.length === 0 && !item.ledDetail
-
-        return (
-          <div key={item.item.id} className="mb-8 border border-slate-200 rounded-lg overflow-hidden">
-            {/* Item header */}
-            <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-full bg-slate-800 text-white text-sm font-bold flex items-center justify-center shrink-0">
-                  {idx + 1}
-                </span>
-                <div>
-                  <span className="font-semibold text-slate-800">
-                    {item.item.name || `Item ${idx + 1}`}
-                  </span>
-                  <span className="text-xs text-slate-500 ml-3">
-                    {isCustom
-                      ? `Custom line${item.item.quantity > 1 ? ` · Qty: ${item.item.quantity}` : ''}`
-                      : <>
-                          {dimStr} · {item.item.fabricType}
-                          {item.item.lightType !== 'none' && ` · ${item.item.lightType.replace(/_/g, ' ')}`}
-                          {item.item.quantity > 1 && ` · Qty: ${item.item.quantity}`}
-                        </>}
-                  </span>
+          return (
+            <section key={item.item.id} className="table-wrap break-inside-avoid">
+              <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md bg-gray-100 text-xs font-semibold text-gray-700 tabular-nums">{idx + 1}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-[14px] font-semibold text-gray-900">{item.item.name || `Item ${idx + 1}`}</h3>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {isCustom
+                        ? `Custom line${item.item.quantity > 1 ? ` · Qty ${item.item.quantity}` : ''}`
+                        : [dimStr, item.item.fabricType, LIGHT_LABEL[item.item.lightType] ?? null, item.item.quantity > 1 ? `Qty ${item.item.quantity}` : null].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
                 </div>
+                {!isCustom && (
+                  <div className="text-right text-xs text-gray-500 tabular-nums">
+                    <p>{sqft.toFixed(2)} sqft ({item.areaM2.toFixed(2)} sqm)</p>
+                    {item.item.quantity > 1 && <p>{round2(sqft * item.item.quantity).toFixed(2)} sqft for {item.item.quantity} pieces</p>}
+                  </div>
+                )}
               </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500">Area: {round2(item.areaM2 * 10.7639).toFixed(2)} sqft ({item.areaM2.toFixed(2)} sqm)</p>
-                {item.item.quantity > 1 && <p className="text-xs text-slate-400">× {item.item.quantity} = {round2(item.areaM2 * item.item.quantity * 10.7639).toFixed(2)} sqft total</p>}
+
+              {!isCustom && (
+                <div className="space-y-1 px-5 py-3 bg-gray-50/60 border-b border-gray-200 text-xs text-gray-600 tabular-nums">
+                  {item.fabricDetail.panels.map((panel, pi) => (
+                    <p key={pi}>
+                      <span className="font-medium text-gray-700">{item.fabricDetail.panels.length > 1 ? `Panel ${pi + 1}` : 'Fabric'}</span>
+                      {' '}{panel.orientation} · billed {panel.panelArea.toFixed(2)} sqm · used {panel.usedArea.toFixed(2)} sqm · waste {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)
+                    </p>
+                  ))}
+                  {item.ledDetail && (
+                    <p>
+                      <span className="font-medium text-gray-700">LED</span>
+                      {' '}{item.ledDetail.stripCount} strips × {item.ledDetail.runningLengthM.toFixed(2)} m = {item.ledDetail.totalRunningMeters} m · {item.ledDetail.totalWatts} W · gap {item.item.ledSpacingMM ?? 125} mm
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="table-scroll">
+                <table className="table min-w-[560px]">
+                  <thead>
+                    <tr>
+                      <th className="w-10">#</th>
+                      <th>Description</th>
+                      <th className="num">Qty</th>
+                      <th>Unit</th>
+                      <th className="num">Rate</th>
+                      <th className="num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.lineItems.map((li, i) => (
+                      // Line items already carry total quantities (× item quantity)
+                      <tr key={i}>
+                        <td className="text-xs text-gray-400 tabular-nums">{i + 1}</td>
+                        <td className="text-gray-800">{li.description}</td>
+                        <td className="num">{round2(li.qty)}</td>
+                        <td className="text-xs text-gray-500">{li.unit}</td>
+                        <td className="num text-gray-500">{fmtINR(li.tierRate)}</td>
+                        <td className="num font-medium text-gray-900">{fmtINR(round2(li.tierAmount))}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td className="text-xs text-gray-400 tabular-nums">{item.lineItems.length + 1}</td>
+                      <td className="text-gray-800">
+                        Installation
+                        {item.item.quantity > 1 && <span className="ml-2 text-xs text-gray-500 tabular-nums">{sqft.toFixed(2)} × {item.item.quantity}</span>}
+                      </td>
+                      <td className="num">{round2(sqft * item.item.quantity).toFixed(2)}</td>
+                      <td className="text-xs text-gray-500">sqft</td>
+                      <td className="num text-gray-500">₹{quote.installationRatePerSqft}</td>
+                      <td className="num font-medium text-gray-900">{fmtINR(item.installationCost)}</td>
+                    </tr>
+                    <tr className="bg-gray-50/60">
+                      <td colSpan={5} className="text-right font-medium text-gray-700">
+                        Item subtotal{item.item.quantity > 1 ? ` (× ${item.item.quantity})` : ''}
+                      </td>
+                      <td className="num font-semibold text-gray-900">{fmtINR(item.itemTotal)}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Fabric info */}
-            {!isCustom && (
-            <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 text-xs text-blue-800">
-              {item.fabricDetail.panels.map((panel, pi) => (
-                <span key={pi} className="mr-6">
-                  {item.fabricDetail.panels.length > 1 ? `Panel ${pi + 1}: ` : ''}
-                  <strong>{panel.orientation}</strong> · Billed: {panel.panelArea.toFixed(2)} sqm · Used: {panel.usedArea.toFixed(2)} sqm · Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)
-                </span>
-              ))}
-            </div>
-            )}
-
-            {/* LED info */}
-            {item.ledDetail && (
-              <div className="px-5 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
-                <strong>LED:</strong> {item.ledDetail.stripCount} strips × {item.ledDetail.runningLengthM.toFixed(2)}m = {item.ledDetail.totalRunningMeters}m running · {item.ledDetail.totalWatts}W · Strip gap: {item.item.ledSpacingMM ?? 125}mm
-              </div>
-            )}
-
-            {/* Line items table */}
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-                  <th className="text-left px-5 py-2.5 font-semibold w-8">#</th>
-                  <th className="text-left px-3 py-2.5 font-semibold">Description</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Qty</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Unit</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Rate</th>
-                  <th className="text-right px-5 py-2.5 font-semibold">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {item.lineItems.map((li, li_idx) => {
-                  // Line items already carry TOTAL quantities (× item quantity)
-                  const totalQty = round2(li.qty)
-                  const totalAmt = round2(li.tierAmount)
-                  return (
-                  <tr key={li_idx} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-5 py-2.5 text-xs text-slate-400">{li_idx + 1}</td>
-                    <td className="px-3 py-2.5 text-slate-700">{li.description}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-700">{totalQty}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{li.unit}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-600">{fmtINR(li.tierRate)}</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-slate-800">{fmtINR(totalAmt)}</td>
-                  </tr>
-                  )
-                })}
-                {/* Installation */}
-                <tr className="border-b border-slate-100 bg-green-50">
-                  <td className="px-5 py-2.5 text-xs text-slate-400">{item.lineItems.length + 1}</td>
-                  <td className="px-3 py-2.5 text-slate-700">
-                    Installation · {round2(item.areaM2 * 10.7639 * item.item.quantity).toFixed(2)} sqft @ ₹{quote.installationRatePerSqft}/sqft
-                    {item.item.quantity > 1 && <span className="text-xs text-slate-400 ml-1">({round2(item.areaM2 * 10.7639).toFixed(2)} × {item.item.quantity})</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-slate-700">{round2(item.areaM2 * 10.7639 * item.item.quantity).toFixed(2)}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-500 text-xs">sqft</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">₹{quote.installationRatePerSqft}</td>
-                  <td className="px-5 py-2.5 text-right font-medium text-green-700">{fmtINR(item.installationCost)}</td>
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 font-semibold">
-                  <td colSpan={5} className="px-5 py-3 text-right text-slate-700">
-                    Item Subtotal {item.item.quantity > 1 ? `(× ${item.item.quantity})` : ''}
-                  </td>
-                  <td className="px-5 py-3 text-right text-slate-900">{fmtINR(item.itemTotal)}</td>
-                </tr>
-              </tfoot>
-            </table>
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Grand total */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <tbody>
-            <tr className="border-b border-slate-100">
-              <td className="px-5 py-3 text-slate-600">Materials Sub-total</td>
-              <td className="px-5 py-3 text-right text-slate-700">{fmtINR(bd.materialsTotalFinal)}</td>
-            </tr>
-            <tr className="border-b border-slate-100">
-              <td className="px-5 py-3 text-slate-600">Total Installation</td>
-              <td className="px-5 py-3 text-right text-slate-600">{fmtINR(bd.totalInstallation)}</td>
-            </tr>
-            {bd.transportCost > 0 && (
-              <tr className="border-b border-slate-100">
-                <td className="px-5 py-3 text-slate-600">Packing &amp; Transport</td>
-                <td className="px-5 py-3 text-right text-slate-600">{fmtINR(bd.transportCost)}</td>
-              </tr>
-            )}
-            <tr className="border-b border-slate-200 bg-slate-50 font-semibold">
-              <td className="px-5 py-3 text-slate-800">Sub-total (before GST)</td>
-              <td className="px-5 py-3 text-right text-slate-800">{fmtINR(bd.subtotalBeforeGst)}</td>
-            </tr>
-            {bd.gstAmount > 0 && (
-              <tr className="border-b border-slate-100">
-                <td className="px-5 py-3 text-slate-600">GST @ 18%</td>
-                <td className="px-5 py-3 text-right text-slate-600">{fmtINR(bd.gstAmount)}</td>
-              </tr>
-            )}
-            <tr className="bg-slate-800 text-white font-bold text-base">
-              <td className="px-5 py-4">Grand Total</td>
-              <td className="px-5 py-4 text-right">{fmtINR(bd.grandTotal)}</td>
-            </tr>
-          </tbody>
-        </table>
+            </section>
+          )
+        })}
       </div>
+
+      <section className="card mt-6 ml-auto max-w-md break-inside-avoid">
+        <dl className="px-5 py-4 space-y-2.5 text-[13px]">
+          <TotalRow label="Materials" value={fmtINR(bd.materialsTotalFinal)} />
+          <TotalRow label="Installation" value={fmtINR(bd.totalInstallation)} />
+          {bd.transportCost > 0 && <TotalRow label="Packing and transport" value={fmtINR(bd.transportCost)} />}
+          <div className="border-t border-gray-100 pt-2.5">
+            <TotalRow label="Subtotal before GST" value={fmtINR(bd.subtotalBeforeGst)} strong />
+          </div>
+          {bd.gstAmount > 0 && <TotalRow label="GST 18%" value={fmtINR(bd.gstAmount)} />}
+        </dl>
+        <div className="flex items-baseline justify-between border-t border-gray-200 bg-gray-50/60 px-5 py-4 rounded-b-lg">
+          <span className="text-[13px] font-medium text-gray-900">Grand total</span>
+          <span className="text-xl font-semibold tracking-tight text-gray-900 tabular-nums">{fmtINR(bd.grandTotal)}</span>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function TotalRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className={strong ? 'font-medium text-gray-900' : 'text-gray-600'}>{label}</dt>
+      <dd className={`tabular-nums ${strong ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'}`}>{value}</dd>
     </div>
   )
 }

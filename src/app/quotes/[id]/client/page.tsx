@@ -1,11 +1,10 @@
-import { dbGetQuote } from "@/lib/db"
+import { dbGetQuote, dbGetProjectIdForQuote } from "@/lib/db"
 import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
 const SQFT_PER_SQM = 10.7639
-import { Edit, Users } from 'lucide-react'
-import PrintButton from '@/components/PrintButton'
+import QuoteHeader from '@/components/QuoteHeader'
 import SharePDF from '@/components/SharePDF'
 
 import { getCompany } from '@/lib/companies'
@@ -29,6 +28,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
   if (!(await canAccessQuote(quote.ownerEmail))) notFound()
+
+  const projectId = await dbGetProjectIdForQuote(quote.id)
 
   // Company branding for this quotation (STC / NLS / future companies)
   const co = getCompany(quote.company)
@@ -95,30 +96,19 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
   return (
     <div>
-      {/* ── Action bar (screen only) ── */}
-      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
-          <a href="/" className="hover:text-gray-700 transition-colors">Quotes</a>
-          <span className="text-gray-300">/</span>
-          <span className="text-gray-600 font-medium">{quote.quoteNumber}</span>
-          <span className="text-gray-300">/</span>
-          <span className="font-semibold text-gray-800">Client View</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs gap-1.5">
-            <Users size={13} /> Team View
-          </a>
-          <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
-            <Edit size={13} /> Edit
-          </a>
-          <PrintButton />
-          <SharePDF quoteNumber={quote.quoteNumber} clientName={quote.clientName} waUrl={waUrl} mailUrl={mailUrl} />
-        </div>
+      <QuoteHeader quote={quote} active="client" projectId={projectId} printable={false} />
+
+      {/* ── Share bar (screen only) ── */}
+      <div className="no-print mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[13px] text-gray-500">
+          Preview of the document sent to the client, issued by <span className="font-medium text-gray-700">{co.name}</span>.
+        </p>
+        <SharePDF quoteNumber={quote.quoteNumber} clientName={quote.clientName} waUrl={waUrl} mailUrl={mailUrl} />
       </div>
 
       {/* ── PDF Pages ── */}
-      <div className="pdf-mobile-outer -mx-3 sm:mx-0 print:overflow-visible print:mx-0">
-      <div id="quote-printable" className="print:w-full" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="pdf-mobile-outer -mx-4 sm:mx-0 rounded-lg bg-gray-100 border border-gray-200 py-8 px-4 sm:px-8 print:overflow-visible print:mx-0 print:p-0 print:border-0 print:bg-white">
+      <div id="quote-printable" className="print:w-full" style={{ fontFamily: "'Geist', system-ui, sans-serif" }}>
 
         {/* ══════════════════════════════
             PAGE 1 — COVER
@@ -143,16 +133,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
           }} />
 
           {/* Content — above overlay */}
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '48px 52px' }}>
+          {/* flex: 1 (not height: 100%) so the column fills the min-height page and the spacer pushes the client block down */}
+          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', flex: 1, padding: '48px 52px 40px' }}>
 
-            {/* Top bar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.25em', fontWeight: 600, textTransform: 'uppercase' }}>
-                  Quotation
-                </p>
-                <div style={{ width: '80px', height: '1px', backgroundColor: 'rgba(255,255,255,0.25)' }} />
-              </div>
+            {/* Top bar: the cover photo already carries the "Quotation" title, so only the company mark sits here */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <div style={{ textAlign: 'right' }}>
                 <p style={{ fontSize: '20px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em', lineHeight: 1 }}>{co.logoText}</p>
                 <p style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.25em', marginTop: '3px' }}>{co.tagline?.toUpperCase()}</p>
@@ -223,12 +208,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
             </div>
 
             {/* Footer */}
-            <div style={{ marginTop: '36px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', fontWeight: 600 }}>
-                {co.address.toUpperCase()} &nbsp;·&nbsp; {co.city.toUpperCase()}
+            {/* Footer: left-aligned so it clears the Pongs mark printed bottom-right on the cover photo */}
+            <div style={{ marginTop: '72px', maxWidth: '520px' }}>
+              <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.12em', fontWeight: 600 }}>
+                {co.name.toUpperCase()}
               </p>
-              <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em' }}>
-                {co.name}
+              <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginTop: '3px' }}>
+                {co.address} · {co.city}
               </p>
             </div>
           </div>
@@ -408,7 +394,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <p style={{ fontSize: '10px', color: '#555', lineHeight: 1.65 }}>
                 Premium PONGS / Descor stretch ceiling fabric
                 {hasGripper ? ', aluminium gripper profiles' : ''}
-                {hasLighting ? ', integrated LED cove lighting with drivers, controllers &amp; remotes' : ''}
+                {hasLighting ? ', integrated LED cove lighting with drivers, controllers and remotes' : ''}
                 {hasPrinting ? ', custom digital printing on fabric' : ''}
                 , and professional installation by certified technicians.
               </p>
@@ -416,8 +402,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
             {/* Notes */}
             {quote.notes && (
-              <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#FFFBEB', borderRadius: '5px', borderLeft: '3px solid #D97706' }}>
-                <p style={{ fontSize: '9px', fontWeight: 700, color: '#92400E', letterSpacing: '0.12em', marginBottom: '5px', textTransform: 'uppercase' }}>Special Notes</p>
+              <div style={{ marginTop: '12px', padding: '12px 16px', backgroundColor: '#F8F8F8', borderRadius: '5px', borderLeft: '3px solid #111' }}>
+                <p style={{ fontSize: '9px', fontWeight: 700, color: '#111', letterSpacing: '0.12em', marginBottom: '5px', textTransform: 'uppercase' }}>Special Notes</p>
                 <p style={{ fontSize: '10px', color: '#555', lineHeight: 1.65, whiteSpace: 'pre-line' }}>{quote.notes}</p>
               </div>
             )}

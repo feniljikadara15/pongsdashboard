@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Save, Loader2, BookUser, Trash2 } from 'lucide-react'
+import { Plus, Save, Loader2, BookUser, Trash2, ChevronDown, Search, Calculator } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
@@ -9,13 +9,16 @@ import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates, Cust
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
+import { PageHeader, Field, Switch, OptionCards } from '@/components/ui'
 
 interface Props {
   initial?: Quote
   mode: 'new' | 'edit'
+  title: string
+  description?: string
 }
 
-export default function QuoteBuilder({ initial, mode }: Props) {
+export default function QuoteBuilder({ initial, mode, title, description }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [savingInternal, setSavingInternal] = useState(false)
@@ -72,7 +75,9 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
   const [clients, setClients] = useState<SavedClient[]>([])
+  const [savedNotice, setSavedNotice] = useState('')
   const [showClientBook, setShowClientBook] = useState(false)
+  const [clientQuery, setClientQuery] = useState('')
 
   useEffect(() => { setClients(listClients()) }, [])
 
@@ -105,7 +110,8 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     }
     saveClient(client)
     setClients(listClients())
-    alert(`Saved "${client.name}" to client book.`)
+    setSavedNotice(`Saved ${client.name} to the client book.`)
+    setTimeout(() => setSavedNotice(''), 2500)
   }
 
   function removeClient(id: string) {
@@ -188,436 +194,425 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
   function handleSave() { return saveQuote('team') }
 
-  const TIER_OPTIONS: { value: PriceTier; label: string; desc: string }[] = [
-    { value: 'dealer', label: 'Dealer', desc: 'Dealer pricing' },
-    { value: 'msp', label: 'MSP', desc: 'Market selling price' },
-    { value: 'specifiors', label: 'Specifiors', desc: 'Architects / Specifiers' },
-    { value: 'manual', label: 'Manual', desc: 'Set custom rates' },
-    { value: 'manual_custom', label: 'Manual (Custom)', desc: 'Free-form rows' },
+
+  const TIER_OPTIONS: { value: PriceTier; label: string; note: string }[] = [
+    { value: 'dealer', label: 'Dealer', note: 'Dealer price list' },
+    { value: 'msp', label: 'MSP', note: 'Market selling price' },
+    { value: 'specifiors', label: 'Specifier', note: 'Architects and specifiers' },
+    { value: 'manual', label: 'Manual rates', note: 'Set fabric, LED, gripper rates' },
+    { value: 'manual_custom', label: 'Custom lines', note: 'Free-form rows, no engine' },
   ]
 
+  const filteredClients = clients.filter(c =>
+    !clientQuery || `${c.name} ${c.location} ${c.email}`.toLowerCase().includes(clientQuery.toLowerCase()))
+
+  const saveLabel = mode === 'edit' ? 'Save changes' : 'Save quote'
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Main form */}
-      <div className="lg:col-span-2 space-y-6">
-
-        {/* Client Book */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <button onClick={() => setShowClientBook(v => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900">
-              <BookUser size={16} />
-              {showClientBook ? 'Hide Client Book' : 'Load from Client Book'}
-              {clients.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{clients.length}</span>
-              )}
+    <div>
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <>
+            {mode === 'edit' && initial && <a href={`/quotes/${initial.id}/team`} className="btn-ghost">Cancel</a>}
+            <button onClick={() => saveQuote('internal')} disabled={savingInternal || saving} className="btn-secondary">
+              {savingInternal ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : <><Calculator size={15} /> Save and review costs</>}
             </button>
-            <button onClick={saveCurrentClient}
-              className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1">
-              <Save size={12} /> Save current client
+            <button onClick={handleSave} disabled={saving || savingInternal} className="btn-primary">
+              {saving ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : <><Save size={15} /> {saveLabel}</>}
             </button>
-          </div>
-          {showClientBook && (
-            <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
-              {clients.length === 0 && (
-                <p className="text-sm text-slate-400 italic">No saved clients yet. Fill in client details above and click &quot;Save current client&quot;.</p>
-              )}
-              {clients.map(c => (
-                <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 group">
-                  <button onClick={() => loadClient(c)} className="flex-1 text-left">
-                    <p className="text-sm font-medium text-slate-800">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.location} · {c.priceTier.toUpperCase()}{c.markupPercent ? ` +${c.markupPercent}%` : ''}</p>
-                  </button>
-                  <button onClick={() => removeClient(c.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </>
+        }
+      />
 
-        {/* Project details */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">1</span>
-            Project Details
-          </h2>
-          {/* Company selector (required) — determines quotation branding */}
-          <div className="mb-5">
-            <label className="label">Issuing Company *</label>
-            <div className="flex gap-2 flex-wrap">
-              {listCompanies().map(c => (
-                <button key={c.id} type="button"
-                  onClick={() => setMeta(m => ({ ...m, company: c.id }))}
-                  className={`px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
-                    meta.company === c.id
-                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="block">{c.shortName}</span>
-                  <span className={`block text-[10px] font-normal ${meta.company === c.id ? 'text-emerald-50' : 'text-slate-400'}`}>{c.name}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-slate-500 mt-1.5">The quotation PDF uses this company&apos;s name, address, GST and bank details. Products, pricing and calculations are identical for both.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Client Name *</label>
-              <input className="input" placeholder="ABC Corporation"
-                value={meta.clientName} onChange={e => setMeta(m => ({ ...m, clientName: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Project Name</label>
-              <input className="input" placeholder="Office Renovation"
-                value={meta.projectName} onChange={e => setMeta(m => ({ ...m, projectName: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Client Email</label>
-              <input type="email" className="input" placeholder="client@example.com"
-                value={meta.clientEmail} onChange={e => setMeta(m => ({ ...m, clientEmail: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Client Phone</label>
-              <input type="tel" className="input" placeholder="+91 98765 43210"
-                value={meta.clientPhone} onChange={e => setMeta(m => ({ ...m, clientPhone: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input className="input" placeholder="Mumbai"
-                value={meta.location} onChange={e => setMeta(m => ({ ...m, location: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Quote Date</label>
-              <input type="date" className="input"
-                value={meta.date} onChange={e => setMeta(m => ({ ...m, date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Valid Until</label>
-              <input type="date" className="input"
-                value={meta.validUntil} onChange={e => setMeta(m => ({ ...m, validUntil: e.target.value }))} />
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        {/* Main form */}
+        <div className="space-y-5 min-w-0">
 
-        {/* Pricing */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
-            Pricing
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-            {TIER_OPTIONS.map(t => (
-              <button
-                key={t.value} type="button"
-                onClick={() => setMeta(m => ({ ...m, priceTier: t.value }))}
-                className={`p-3 rounded-xl border text-left transition-all ${
-                  meta.priceTier === t.value
-                    ? 'border-slate-700 bg-slate-800'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className={`font-semibold text-sm ${meta.priceTier === t.value ? 'text-white' : 'text-slate-800'}`}>
-                  {t.label}
-                </div>
-                <div className={`text-xs mt-0.5 ${meta.priceTier === t.value ? 'text-slate-300' : 'text-slate-500'}`}>{t.desc}</div>
-              </button>
-            ))}
-          </div>
-          {meta.priceTier === 'manual' && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 space-y-3">
-              <p className="text-xs font-semibold text-amber-900">Manual Rates — set your own price per unit</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="label text-amber-800">Fabric (₹/sqm)</label>
-                  <input
-                    type="number" min="0" step="10" className="input"
-                    placeholder="e.g. 1100"
-                    value={manualRates.fabricPerSqm || ''}
-                    onChange={e => setManualRates(r => ({ ...r, fabricPerSqm: parseFloat(e.target.value) || 0 }))}
-                  />
-                </div>
-                <div>
-                  <label className="label text-amber-800">LED (₹/mtr)</label>
-                  <input
-                    type="number" min="0" step="10" className="input"
-                    placeholder="e.g. 350"
-                    value={manualRates.ledPerMtr || ''}
-                    onChange={e => setManualRates(r => ({ ...r, ledPerMtr: parseFloat(e.target.value) || 0 }))}
-                  />
-                </div>
-                <div>
-                  <label className="label text-amber-800">Gripper (₹/rmt)</label>
-                  <input
-                    type="number" min="0" step="5" className="input"
-                    placeholder="e.g. 170"
-                    value={manualRates.gripperPerRmt || ''}
-                    onChange={e => setManualRates(r => ({ ...r, gripperPerRmt: parseFloat(e.target.value) || 0 }))}
-                  />
-                </div>
-              </div>
+          {/* Client and project */}
+          <section className="card">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-gray-100">
               <div>
-                <label className="label text-amber-800 mb-1">Drivers, Controls, Printing &amp; Fleece — use pricing tier</label>
-                <div className="flex gap-2">
-                  {(['dealer', 'msp', 'specifiors'] as const).map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setManualRates(r => ({ ...r, otherItemsTier: t }))}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                        manualRates.otherItemsTier === t
-                          ? 'border-amber-700 bg-amber-700 text-white'
-                          : 'border-amber-300 bg-white text-amber-800 hover:border-amber-500'
-                      }`}
-                    >
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
+                <h2 className="card-title">Client and project</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Who the quotation is for and where the work is.</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="relative">
+                  <button type="button" onClick={() => setShowClientBook(v => !v)} className="btn-secondary btn-sm" aria-expanded={showClientBook}>
+                    <BookUser size={14} /> Client book
+                    {clients.length > 0 && <span className="text-gray-400 tabular-nums">{clients.length}</span>}
+                    <ChevronDown size={13} className="text-gray-400" />
+                  </button>
+                  {showClientBook && (
+                    <>
+                      <div className="fixed inset-0 z-20" onClick={() => setShowClientBook(false)} />
+                      <div className="absolute right-0 top-full mt-1.5 z-30 w-80 rounded-lg border border-gray-200 bg-white shadow-lg animate-scale-in origin-top-right">
+                        <div className="p-2 border-b border-gray-100">
+                          <div className="relative">
+                            <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input autoFocus className="input h-8 pl-8" placeholder="Search saved clients" value={clientQuery} onChange={e => setClientQuery(e.target.value)} />
+                          </div>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto p-1">
+                          {filteredClients.length === 0 && (
+                            <p className="px-3 py-6 text-center text-xs text-gray-500">
+                              {clients.length === 0 ? 'No saved clients yet. Fill in the details and choose Save to client book.' : 'No clients match.'}
+                            </p>
+                          )}
+                          {filteredClients.map(c => (
+                            <div key={c.id} className="group flex items-center gap-2 rounded-md px-2.5 py-2 hover:bg-gray-100">
+                              <button type="button" onClick={() => loadClient(c)} className="min-w-0 flex-1 text-left">
+                                <p className="truncate text-[13px] font-medium text-gray-900">{c.name}</p>
+                                <p className="truncate text-xs text-gray-500">
+                                  {[c.location, c.priceTier.toUpperCase(), c.markupPercent ? `+${c.markupPercent}%` : null].filter(Boolean).join(' · ')}
+                                </p>
+                              </button>
+                              <button type="button" onClick={() => removeClient(c.id)} aria-label={`Remove ${c.name}`}
+                                className="btn-ghost btn-icon h-7 w-7 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-700">
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button type="button" onClick={saveCurrentClient} className="btn-ghost btn-sm">Save to client book</button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {savedNotice && <div className="alert-success">{savedNotice}</div>}
+
+              {/* Company selector (required) — determines quotation branding */}
+              <div>
+                <span className="label">Issuing company<span className="text-red-600 ml-0.5">*</span></span>
+                <OptionCards
+                  value={meta.company}
+                  onChange={v => setMeta(m => ({ ...m, company: v }))}
+                  options={listCompanies().map(c => ({ value: c.id, label: c.shortName, note: c.name }))}
+                  columns="grid-cols-2 sm:grid-cols-3"
+                />
+                <p className="hint">Sets the name, address, GST and bank details on the PDF. Pricing is identical for both.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Client name" required>
+                  <input className="input" placeholder="Company or person"
+                    value={meta.clientName} onChange={e => setMeta(m => ({ ...m, clientName: e.target.value }))} />
+                </Field>
+                <Field label="Project name">
+                  <input className="input" placeholder="Villa living room"
+                    value={meta.projectName} onChange={e => setMeta(m => ({ ...m, projectName: e.target.value }))} />
+                </Field>
+                <Field label="Email">
+                  <input type="email" className="input" placeholder="client@company.com"
+                    value={meta.clientEmail} onChange={e => setMeta(m => ({ ...m, clientEmail: e.target.value }))} />
+                </Field>
+                <Field label="Phone">
+                  <input type="tel" className="input" placeholder="+91 98765 43210"
+                    value={meta.clientPhone} onChange={e => setMeta(m => ({ ...m, clientPhone: e.target.value }))} />
+                </Field>
+                <Field label="Site location" className="sm:col-span-2">
+                  <input className="input" placeholder="Area, city"
+                    value={meta.location} onChange={e => setMeta(m => ({ ...m, location: e.target.value }))} />
+                </Field>
+                <Field label="Quote date">
+                  <input type="date" className="input tabular-nums"
+                    value={meta.date} onChange={e => setMeta(m => ({ ...m, date: e.target.value }))} />
+                </Field>
+                <Field label="Valid until">
+                  <input type="date" className="input tabular-nums"
+                    value={meta.validUntil} onChange={e => setMeta(m => ({ ...m, validUntil: e.target.value }))} />
+                </Field>
+              </div>
+            </div>
+          </section>
+
+          {/* Pricing */}
+          <section className="card">
+            <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+              <h2 className="card-title">Pricing</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Price list, adjustments and how totals appear to the client.</p>
+            </div>
+            <div className="p-5 space-y-5">
+              <div>
+                <span className="label">Price list</span>
+                <OptionCards
+                  value={meta.priceTier}
+                  onChange={v => setMeta(m => ({ ...m, priceTier: v }))}
+                  options={TIER_OPTIONS}
+                  columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+                />
+              </div>
+
+              {meta.priceTier === 'manual' && (
+                <div className="rounded-md border border-gray-200 bg-gray-50/70 p-4 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label="Fabric (₹ per sqm)">
+                      <input type="number" min="0" step="10" className="input tabular-nums" placeholder="1100"
+                        value={manualRates.fabricPerSqm || ''}
+                        onChange={e => setManualRates(r => ({ ...r, fabricPerSqm: parseFloat(e.target.value) || 0 }))} />
+                    </Field>
+                    <Field label="LED (₹ per m)">
+                      <input type="number" min="0" step="10" className="input tabular-nums" placeholder="350"
+                        value={manualRates.ledPerMtr || ''}
+                        onChange={e => setManualRates(r => ({ ...r, ledPerMtr: parseFloat(e.target.value) || 0 }))} />
+                    </Field>
+                    <Field label="Gripper (₹ per rmt)">
+                      <input type="number" min="0" step="5" className="input tabular-nums" placeholder="170"
+                        value={manualRates.gripperPerRmt || ''}
+                        onChange={e => setManualRates(r => ({ ...r, gripperPerRmt: parseFloat(e.target.value) || 0 }))} />
+                    </Field>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-medium text-gray-900">Drivers, controls, printing and fleece</p>
+                      <p className="text-xs text-gray-500">Priced from this list.</p>
+                    </div>
+                    <div className="segmented" role="radiogroup" aria-label="Price list for other items">
+                      {(['dealer', 'msp', 'specifiors'] as const).map(t => (
+                        <button key={t} type="button" role="radio" aria-checked={manualRates.otherItemsTier === t}
+                          data-active={manualRates.otherItemsTier === t}
+                          onClick={() => setManualRates(r => ({ ...r, otherItemsTier: t }))}>
+                          {t === 'msp' ? 'MSP' : t === 'specifiors' ? 'Specifier' : 'Dealer'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {!isCustom && (
+                  <Field label="Additional markup (%)">
+                    <input type="number" min="0" max="200" className="input tabular-nums"
+                      value={meta.markupPercent}
+                      onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} />
+                  </Field>
+                )}
+                {!isCustom && (
+                  <Field label="Installation (₹ per sqft)">
+                    <input type="number" min="0" className="input tabular-nums"
+                      value={meta.installationRatePerSqft}
+                      onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
+                  </Field>
+                )}
+                <Field label="Transport (₹ flat)">
+                  <input type="number" min="0" className="input tabular-nums"
+                    value={meta.transportCost}
+                    onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} />
+                </Field>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                <Switch checked={meta.includeGst} onChange={v => setMeta(m => ({ ...m, includeGst: v }))}
+                  label="Add GST at 18%" description="Shown as a separate line on the quotation." />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Show client</span>
+                  <div className="segmented" role="radiogroup" aria-label="Display mode">
+                    {(['total', 'per-sqft'] as QuoteDisplayMode[]).map(m => (
+                      <button key={m} type="button" role="radio" aria-checked={meta.displayMode === m}
+                        data-active={meta.displayMode === m}
+                        onClick={() => setMeta(mm => ({ ...mm, displayMode: m }))}>
+                        {m === 'total' ? 'Total price' : 'Price per sqft'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          )}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {!isCustom && (
-            <div>
-              <label className="label">Additional Markup (%)</label>
-              <input type="number" min="0" max="200" className="input"
-                value={meta.markupPercent}
-                onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            )}
-            {!isCustom && (
-            <div>
-              <label className="label">Installation Rate (₹/sqft)</label>
-              <input type="number" min="0" className="input"
-                value={meta.installationRatePerSqft}
-                onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            )}
-            <div>
-              <label className="label">Transport Cost (₹ flat)</label>
-              <input type="number" min="0" className="input"
-                value={meta.transportCost}
-                onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} />
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div
-                onClick={() => setMeta(m => ({ ...m, includeGst: !m.includeGst }))}
-                className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${
-                  meta.includeGst ? 'bg-slate-800' : 'bg-slate-200'
-                }`}
-              >
-                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                  meta.includeGst ? 'translate-x-5' : 'translate-x-1'
-                }`} />
+          </section>
+
+          {/* Custom rows (Manual Custom) or Ceiling items */}
+          {isCustom ? (
+            <section className="card">
+              <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+                <h2 className="card-title">Line items</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Every value is used exactly as entered. No automatic pricing is applied.</p>
               </div>
-              <span className="text-sm text-slate-700 font-medium">Include GST (18%)</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">Display:</span>
-              {(['total', 'per-sqft'] as QuoteDisplayMode[]).map(m => (
-                <button key={m} type="button"
-                  onClick={() => setMeta(mm => ({ ...mm, displayMode: m }))}
-                  className={`px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
-                    meta.displayMode === m
-                      ? 'border-slate-700 bg-slate-800 text-white'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {m === 'total' ? 'Total Price' : 'Per Sqft'}
-                </button>
-              ))}
+              <datalist id="custom-item-suggestions">
+                {CUSTOM_ITEM_SUGGESTIONS.map(s => <option key={s} value={s} />)}
+              </datalist>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th className="num w-[84px]">Qty</th>
+                      <th className="num w-[120px]">Cost (₹)</th>
+                      <th className="num w-[120px]">Selling (₹)</th>
+                      <th className="num w-[120px]">Amount</th>
+                      <th className="w-12"><span className="sr-only">Remove</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customLines.map((l) => {
+                      const amount = (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0)
+                      return (
+                        <tr key={l.id}>
+                          <td className="py-2 min-w-[200px]">
+                            <input list="custom-item-suggestions" className="input" placeholder="Choose or type an item" aria-label="Item"
+                              value={l.description} onChange={e => updateCustomLine(l.id, { description: e.target.value })} />
+                          </td>
+                          <td className="py-2">
+                            <input type="number" min="0" step="1" className="input text-right tabular-nums" placeholder="1" aria-label="Quantity"
+                              value={l.qty || ''} onChange={e => updateCustomLine(l.id, { qty: parseFloat(e.target.value) || 0 })} />
+                          </td>
+                          <td className="py-2">
+                            <input type="number" min="0" step="1" className="input text-right tabular-nums" placeholder="0" aria-label="Cost"
+                              value={l.cost || ''} onChange={e => updateCustomLine(l.id, { cost: parseFloat(e.target.value) || 0 })} />
+                          </td>
+                          <td className="py-2">
+                            <input type="number" min="0" step="1" className="input text-right tabular-nums" placeholder="0" aria-label="Selling price"
+                              value={l.sellingPrice || ''} onChange={e => updateCustomLine(l.id, { sellingPrice: parseFloat(e.target.value) || 0 })} />
+                          </td>
+                          <td className="num py-2 font-medium text-gray-900">{fmtINR(amount)}</td>
+                          <td className="py-2 text-right">
+                            <button type="button" onClick={() => removeCustomLine(l.id)} title="Remove row" aria-label="Remove row"
+                              disabled={customLines.length === 1}
+                              className="btn-ghost btn-icon text-gray-400 hover:text-red-700">
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between border-t border-gray-200 px-4 py-2.5">
+                <button type="button" onClick={addCustomLine} className="btn-ghost btn-sm"><Plus size={14} /> Add row</button>
+                <span className="text-[13px] text-gray-500">Lines total <span className="ml-2 font-semibold text-gray-900 tabular-nums">{fmtINR(customTotal)}</span></span>
+              </div>
+            </section>
+          ) : (
+            <section>
+              <div className="flex items-end justify-between mb-3">
+                <div>
+                  <h2 className="section-title">Ceiling items</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">{items.length} item{items.length !== 1 ? 's' : ''}. Each is priced from its dimensions, fabric and lighting.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {items.map((item, idx) => (
+                  <CeilingItemForm
+                    key={item.id}
+                    item={item}
+                    index={idx}
+                    priceTier={meta.priceTier}
+                    installRatePerSqft={meta.installationRatePerSqft}
+                    manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
+                    onChange={updated => updateItem(idx, updated)}
+                    onRemove={() => removeItem(idx)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addItem}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 h-11 text-[13px] font-medium text-gray-600 hover:border-gray-400 hover:bg-white hover:text-gray-900 transition-colors"
+              >
+                <Plus size={15} /> Add ceiling item
+              </button>
+            </section>
+          )}
+
+          {/* Notes */}
+          <section className="card">
+            <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+              <h2 className="card-title">Notes and terms</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Printed on the client quotation.</p>
             </div>
-          </div>
+            <div className="p-5">
+              <textarea className="input resize-y" rows={4}
+                placeholder="Payment terms, exclusions, site conditions"
+                value={meta.notes}
+                onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} />
+            </div>
+          </section>
         </div>
 
-        {/* Section 3 — Custom rows (Manual Custom) or Ceiling items */}
-        {isCustom ? (
-          <div>
-            <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
-              Custom Quotation
-            </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Free-form — every value below is used exactly as entered. No automatic calculations or pricing are applied.
-            </p>
-            <datalist id="custom-item-suggestions">
-              {CUSTOM_ITEM_SUGGESTIONS.map(s => <option key={s} value={s} />)}
-            </datalist>
-            <div className="hidden sm:grid gap-2 px-1 pb-2 mb-1 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide"
-              style={{ gridTemplateColumns: '1fr 70px 100px 100px 100px 32px' }}>
-              <div>Item</div>
-              <div className="text-right">Qty</div>
-              <div className="text-right">Cost ₹</div>
-              <div className="text-right">Selling ₹</div>
-              <div className="text-right">Amount</div>
-              <div />
+        {/* Summary */}
+        <aside className="xl:sticky xl:top-20 space-y-3">
+          <section className="card">
+            <div className="flex items-center justify-between px-5 h-12 border-b border-gray-100">
+              <h3 className="card-title">Summary</h3>
+              <span className="text-xs text-gray-500">{meta.company} · {TIER_OPTIONS.find(t => t.value === meta.priceTier)?.label}</span>
             </div>
-            <div className="space-y-2">
-              {customLines.map((l) => {
-                const amount = (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0)
-                return (
-                  <div key={l.id} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 70px 100px 100px 100px 32px' }}>
-                    <input list="custom-item-suggestions" className="input" placeholder="Select or type item"
-                      value={l.description} onChange={e => updateCustomLine(l.id, { description: e.target.value })} />
-                    <input type="number" min="0" step="1" className="input text-right" placeholder="1"
-                      value={l.qty || ''} onChange={e => updateCustomLine(l.id, { qty: parseFloat(e.target.value) || 0 })} />
-                    <input type="number" min="0" step="1" className="input text-right" placeholder="0"
-                      value={l.cost || ''} onChange={e => updateCustomLine(l.id, { cost: parseFloat(e.target.value) || 0 })} />
-                    <input type="number" min="0" step="1" className="input text-right" placeholder="0"
-                      value={l.sellingPrice || ''} onChange={e => updateCustomLine(l.id, { sellingPrice: parseFloat(e.target.value) || 0 })} />
-                    <div className="text-sm text-right font-medium text-slate-800">{fmtINR(amount)}</div>
-                    <button type="button" onClick={() => removeCustomLine(l.id)} title="Remove row"
-                      disabled={customLines.length === 1}
-                      className="text-rose-500 hover:text-rose-700 disabled:opacity-30 flex items-center justify-center">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-            <button type="button" onClick={addCustomLine}
-              className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
-              <Plus size={16} /> Add Row
-            </button>
-            <div className="flex justify-end mt-3 text-sm text-slate-500">
-              Lines total: <span className="ml-1 font-semibold text-slate-800">{fmtINR(customTotal)}</span>
-            </div>
-          </div>
-        ) : (
-        <div>
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
-            Ceiling Items
-          </h2>
-          <div className="space-y-4">
-            {items.map((item, idx) => (
-              <CeilingItemForm
-                key={item.id}
-                item={item}
-                index={idx}
-                priceTier={meta.priceTier}
-                installRatePerSqft={meta.installationRatePerSqft}
-                manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
-                onChange={updated => updateItem(idx, updated)}
-                onRemove={() => removeItem(idx)}
-              />
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addItem}
-            className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-          >
-            <Plus size={16} /> Add Ceiling Item
-          </button>
-        </div>
-        )}
-
-        {/* Notes */}
-        <div className="card p-6">
-          <label className="label">Quote Notes / Terms</label>
-          <textarea className="input resize-none h-24"
-            placeholder="Any special notes, terms, or conditions…"
-            value={meta.notes}
-            onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} />
-        </div>
-      </div>
-
-      {/* Sidebar */}
-      <div className="lg:col-span-1">
-        <div className="sticky top-24 space-y-4">
-          <div className="card p-5">
-            <h3 className="font-semibold text-slate-800 mb-4">Quote Summary</h3>
             {preview ? (
-              <>
-                <div className="space-y-2 mb-4">
+              <div className="px-5 py-4">
+                <dl className="space-y-2 text-[13px]">
                   {preview.itemBreakdowns.map((bd, idx) => (
-                    <div key={bd.item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 last:border-0">
-                      <span className="text-slate-600 truncate max-w-[60%]">
-                        {bd.item.name || `Item ${idx + 1}`}
-                      </span>
-                      <span className="font-semibold text-slate-800">{fmtINR(bd.itemTotal)}</span>
+                    <div key={bd.item.id} className="flex items-baseline justify-between gap-3">
+                      <dt className="truncate text-gray-600">{bd.item.name || `Item ${idx + 1}`}</dt>
+                      <dd className="shrink-0 font-medium text-gray-900 tabular-nums">{fmtINR(bd.itemTotal)}</dd>
                     </div>
                   ))}
+                  {meta.transportCost > 0 && (
+                    <div className="flex justify-between text-gray-600">
+                      <dt>Transport</dt>
+                      <dd className="tabular-nums">{fmtINR(meta.transportCost)}</dd>
+                    </div>
+                  )}
+                  {preview.gstAmount > 0 && (
+                    <div className="flex justify-between text-gray-600">
+                      <dt>GST 18%</dt>
+                      <dd className="tabular-nums">{fmtINR(preview.gstAmount)}</dd>
+                    </div>
+                  )}
+                </dl>
+                <div className="mt-4 pt-4 border-t border-gray-200 flex items-baseline justify-between">
+                  <span className="text-[13px] font-medium text-gray-900">Total</span>
+                  <span className="text-[22px] font-semibold tracking-tight text-gray-900 tabular-nums">{fmtINR(preview.grandTotal)}</span>
                 </div>
-                {meta.transportCost > 0 && (
-                  <div className="flex justify-between text-sm py-1 text-slate-500">
-                    <span>Transport</span>
-                    <span>{fmtINR(meta.transportCost)}</span>
-                  </div>
-                )}
-                {preview.gstAmount > 0 && (
-                  <div className="flex justify-between text-sm py-1 text-slate-500">
-                    <span>GST 18%</span>
-                    <span>{fmtINR(preview.gstAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
-                  <span className="font-bold text-slate-900">Total</span>
-                  <span className="text-xl font-bold text-slate-900">{fmtINR(preview.grandTotal)}</span>
-                </div>
-                {meta.displayMode === 'per-sqft' && preview.totalSqft > 0 && (
-                  <p className="text-xs text-slate-500 mt-1 text-right">
-                    {preview.totalSqft.toFixed(1)} sqft · ₹{Math.round(preview.pricePerSqft)}/sqft
-                  </p>
-                )}
-                <p className="text-xs text-slate-400 mt-2">
-                  {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}
-                  {meta.includeGst ? 'Incl. GST 18%' : 'Excl. GST'}
+                <p className="mt-1 text-right text-xs text-gray-500">
+                  {[meta.markupPercent > 0 ? `${meta.markupPercent}% markup` : null, meta.includeGst ? 'Including GST' : 'Excluding GST'].filter(Boolean).join(' · ')}
                 </p>
-              </>
+                {preview.totalSqft > 0 && (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-md bg-gray-50 px-3 py-2">
+                      <p className="text-2xs text-gray-500">Area</p>
+                      <p className="text-[13px] font-medium text-gray-900 tabular-nums">{preview.totalSqft.toFixed(1)} sqft</p>
+                    </div>
+                    <div className="rounded-md bg-gray-50 px-3 py-2">
+                      <p className="text-2xs text-gray-500">Rate</p>
+                      <p className="text-[13px] font-medium text-gray-900 tabular-nums">₹{Math.round(preview.pricePerSqft).toLocaleString('en-IN')}/sqft</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
-              <p className="text-sm text-slate-400">Add items to see summary</p>
+              <p className="px-5 py-8 text-center text-[13px] text-gray-500">Add item dimensions to see the total.</p>
             )}
-          </div>
+            <div className="border-t border-gray-100 p-3 space-y-2">
+              <button onClick={handleSave} disabled={saving || savingInternal} className="btn-primary w-full">
+                {saving ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : <><Save size={15} /> {saveLabel}</>}
+              </button>
+              <button onClick={() => saveQuote('internal')} disabled={savingInternal || saving} className="btn-secondary w-full">
+                {savingInternal ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : 'Save and review costs'}
+              </button>
+            </div>
+          </section>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full btn text-sm py-3 font-semibold justify-center btn-primary"
-          >
-            {saving ? (
-              <><Loader2 size={16} className="animate-spin" /> Saving…</>
-            ) : (
-              <><Save size={16} /> {mode === 'edit' ? 'Update Quote' : 'Save Quote'}</>
-            )}
-          </button>
-
-          <button
-            onClick={() => saveQuote('internal')}
-            disabled={savingInternal || saving}
-            className="w-full btn btn-secondary text-sm py-2.5 font-semibold justify-center"
-          >
-            {savingInternal ? (
-              <><Loader2 size={16} className="animate-spin" /> Saving…</>
-            ) : (
-              <>Save &amp; Open Internal Cost Review</>
-            )}
-          </button>
-
-          {mode === 'edit' && (
-            <a href="/" className="btn-secondary w-full justify-center text-sm">
-              Cancel
-            </a>
-          )}
-
-          <div className="card p-4 bg-slate-50 border-slate-200">
-            <p className="text-xs font-semibold text-slate-700 mb-2">Smart Calculations</p>
-            <ul className="text-xs text-slate-500 space-y-1">
-              <li>• Fabric cut length and gripper perimeter use exact dimensions (no rounding)</li>
-              <li>• Joint option available for all rectangle sizes</li>
-              <li>• LED strips counted across shorter dim at chosen gap (default 125mm), length rounded up to nearest 1m module</li>
-              <li>• Circle: LED count = 80% of equivalent bounding square</li>
-              <li>• DALI Tunable: DT8 150W max 10 modules + DA4m at 1 per 3 drivers</li>
-              <li>• Standard Tunable/Dimmable: 200W/450W/600W drivers + EV2 + V2 + RT2</li>
-              <li>• Single Colour: 80% driver capacity + EV1 + V1 + RT1</li>
+          <details className="card group">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-5 h-11 text-[13px] font-medium text-gray-700">
+              How quantities are calculated
+              <ChevronDown size={15} className="text-gray-400 transition-transform group-open:rotate-180" />
+            </summary>
+            <ul className="space-y-2 border-t border-gray-100 px-5 py-4 text-xs leading-relaxed text-gray-600">
+              <li>Fabric cut length and gripper perimeter use exact dimensions, without rounding.</li>
+              <li>A joint can be added to any rectangle.</li>
+              <li>LED strips run across the shorter side at the chosen gap (default 125 mm). Length rounds up to the next 1 m module.</li>
+              <li>Circles use 80% of the LED count for the equivalent bounding square.</li>
+              <li>DALI tunable: DT8 150W, maximum 10 modules, plus one DA4m per 3 drivers.</li>
+              <li>Standard tunable or dimmable: 200W, 450W or 600W drivers with EV2, V2 and RT2.</li>
+              <li>Single colour: drivers loaded to 80% with EV1, V1 and RT1.</li>
             </ul>
-          </div>
-        </div>
+          </details>
+        </aside>
       </div>
     </div>
   )

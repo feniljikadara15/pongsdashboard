@@ -1,10 +1,10 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronsUpDown, KeyRound, LogOut, Inbox, ShieldCheck } from 'lucide-react'
+import { Avatar, Badge, Field, Modal } from '@/components/ui'
 
 type User = { id: string; name: string; email: string; role: string; isAdmin?: boolean }
-
-const ROLE_COLORS: Record<string, string> = { admin:'bg-red-100 text-red-700', manager:'bg-blue-100 text-blue-700', sales:'bg-green-100 text-green-700', installer:'bg-orange-100 text-orange-700', viewer:'bg-gray-100 text-gray-600' }
 
 export default function UserMenu() {
   const [user, setUser] = useState<User | null>(null)
@@ -14,7 +14,7 @@ export default function UserMenu() {
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r=>r.json()).then(d => setUser(d)).catch(() => {})
+    fetch('/api/auth/me').then(r => r.json()).then(d => setUser(d?.email ? d : null)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -33,53 +33,44 @@ export default function UserMenu() {
   }
 
   if (!user) {
-    return (
-      <a href="/login" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-        Sign in
-      </a>
-    )
+    return <a href="/login" className="btn-secondary w-full">Sign in</a>
   }
 
-  const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-  const isAdmin = user.isAdmin || user.role === 'admin' || user.email?.toLowerCase() === 'sidhanthrj@gmail.com'
+  const isAdmin = user.isAdmin || user.role === 'admin'
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-        <div className="w-7 h-7 bg-gray-900 rounded-full flex items-center justify-center">
-          <span className="text-white text-[10px] font-bold">{initials}</span>
-        </div>
-        <span className="text-xs font-medium text-gray-700 hidden sm:block">{user.name.split(' ')[0]}</span>
+      <button onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-gray-200/60 transition-colors">
+        <Avatar name={user.name} size={28} />
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-[13px] font-medium text-gray-900">{user.name}</span>
+          <span className="block truncate text-2xs text-gray-500">{user.email}</span>
+        </span>
+        <ChevronsUpDown size={14} className="shrink-0 text-gray-400" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900">{user.name}</p>
-            <p className="text-xs text-gray-500">{user.email}</p>
-            <span className={`badge mt-1.5 ${ROLE_COLORS[user.role] ?? 'bg-gray-100 text-gray-600'} capitalize`}>{user.role}</span>
+        <div role="menu" className="absolute bottom-full left-0 right-0 mb-1.5 rounded-lg border border-gray-200 bg-white shadow-lg z-50 overflow-hidden animate-scale-in origin-bottom">
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-500">Signed in as</span>
+            <Badge tone={isAdmin ? 'accent' : 'neutral'} className="capitalize">{user.role}</Badge>
           </div>
           <div className="p-1">
             {isAdmin && (
               <>
-                <a href="/admin/access-requests" onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg transition-colors font-medium">
-                  <span>📋</span> Access Requests
-                </a>
-                <a href="/users" onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                  <span>🛡️</span> User Management
-                </a>
+                <MenuLink href="/admin/access-requests" icon={Inbox} label="Access requests" />
+                <MenuLink href="/users" icon={ShieldCheck} label="Team & access" />
+                <div className="my-1 border-t border-gray-100" />
               </>
             )}
-            <button onClick={() => { setPwOpen(true); setOpen(false) }}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-              <span>🔑</span> Change password
+            <button role="menuitem" onClick={() => { setPwOpen(true); setOpen(false) }}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 h-8 text-[13px] text-gray-700 hover:bg-gray-100">
+              <KeyRound size={14} className="text-gray-400" /> Change password
             </button>
-            <button onClick={logout}
-              className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-0.5">
-              <span>→</span> Sign out
+            <button role="menuitem" onClick={logout}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 h-8 text-[13px] text-red-700 hover:bg-red-50">
+              <LogOut size={14} /> Sign out
             </button>
           </div>
         </div>
@@ -87,6 +78,14 @@ export default function UserMenu() {
 
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </div>
+  )
+}
+
+function MenuLink({ href, icon: Icon, label }: { href: string; icon: typeof Inbox; label: string }) {
+  return (
+    <a role="menuitem" href={href} className="flex items-center gap-2 rounded-md px-2.5 h-8 text-[13px] text-gray-700 hover:bg-gray-100">
+      <Icon size={14} className="text-gray-400" /> {label}
+    </a>
   )
 }
 
@@ -115,37 +114,29 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-        <h2 className="text-base font-bold text-gray-900 mb-4">Change password</h2>
-        {done ? (
-          <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">Password updated.</p>
-        ) : (
-          <form onSubmit={submit} className="space-y-3">
-            {error && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Current password</label>
-              <input type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password"
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">New password</label>
-              <input type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" required
-                placeholder="At least 8 characters"
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Confirm new password</label>
-              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" required
-                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-            </div>
-            <div className="flex gap-2 justify-end pt-1">
-              <button type="button" onClick={onClose} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary text-xs px-4 py-2">{saving ? 'Saving…' : 'Update'}</button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+    <Modal title="Change password" onClose={onClose} width="max-w-sm"
+      footer={done ? undefined : (
+        <>
+          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="submit" form="pw-form" disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Update password'}</button>
+        </>
+      )}>
+      {done ? (
+        <p className="alert-success">Your password has been updated.</p>
+      ) : (
+        <form id="pw-form" onSubmit={submit} className="space-y-4">
+          {error && <div className="alert-error">{error}</div>}
+          <Field label="Current password">
+            <input type="password" value={current} onChange={e => setCurrent(e.target.value)} autoComplete="current-password" className="input" />
+          </Field>
+          <Field label="New password" hint="At least 8 characters.">
+            <input type="password" value={next} onChange={e => setNext(e.target.value)} autoComplete="new-password" required className="input" />
+          </Field>
+          <Field label="Confirm new password">
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" required className="input" />
+          </Field>
+        </form>
+      )}
+    </Modal>
   )
 }

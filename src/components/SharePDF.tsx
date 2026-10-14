@@ -110,22 +110,22 @@ export default function SharePDF({ quoteNumber, clientName, waUrl, mailUrl }: Pr
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <a href={waUrl} target="_blank" rel="noopener noreferrer"
-        className="btn-secondary text-xs gap-1.5 flex items-center">
+        className="btn-secondary">
         <MessageCircle size={14} /> WhatsApp
       </a>
       <a href={mailUrl}
-        className="btn-secondary text-xs gap-1.5 flex items-center">
+        className="btn-secondary">
         <Mail size={14} /> Email
       </a>
       <button onClick={sharePDF} disabled={generating}
-        className="btn-primary text-xs gap-1.5 flex items-center">
+        className="btn-primary">
         {generating
           ? <><Loader2 size={14} className="animate-spin" /> {status || 'Generating…'}</>
-          : <><Share2 size={14} /> Share PDF</>}
+          : <><Share2 size={14} /> Share</>}
       </button>
       <button onClick={downloadPDF} disabled={generating}
-        className="btn-secondary text-xs gap-1.5 flex items-center">
-        <Download size={14} /> Download PDF
+        className="btn-secondary">
+        <Download size={14} /> Download
       </button>
     </div>
   )

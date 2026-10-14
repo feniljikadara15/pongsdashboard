@@ -717,6 +717,9 @@ export async function initPermissionsTables() {
     id TEXT PRIMARY KEY, user_id TEXT, action TEXT NOT NULL,
     details TEXT, created_at TEXT DEFAULT (datetime('now'))
   )`)
+  // Migrate: user_name is read by dbListActivity as a fallback for log rows
+  // whose user has since been deleted; fresh databases never had the column.
+  try { await db.execute(`ALTER TABLE user_activity_log ADD COLUMN user_name TEXT`) } catch { /* exists */ }
   const existing = await db.execute('SELECT COUNT(*) as c FROM role_permissions')
   if (Number((existing.rows[0] as Record<string,unknown>).c) === 0) {
     for (const { feature, view, edit } of DEFAULT_PERMISSIONS) {
@@ -1088,4 +1091,12 @@ export async function initFollowupsTable() {
     created_at TEXT DEFAULT (datetime('now'))
   )`)
   _followupsInit = true
+}
+
+// The project created from a quote (via "Convert to project"), if any.
+export async function dbGetProjectIdForQuote(quoteId: string): Promise<string | null> {
+  await initProjectsTables()
+  const db = getClient()
+  const r = await db.execute('SELECT id FROM projects WHERE quote_id = ? ORDER BY created_at ASC LIMIT 1', [quoteId])
+  return r.rows.length ? String((r.rows[0] as Record<string, unknown>).id) : null
 }

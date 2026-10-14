@@ -1,6 +1,9 @@
 'use client'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowRight } from 'lucide-react'
+import AuthLayout from '@/components/AuthLayout'
+import { Field } from '@/components/ui'
 
 function LoginForm() {
   const [email, setEmail] = useState('')
@@ -31,11 +34,11 @@ function LoginForm() {
       // The account exists but has never set a password → switch to setup mode.
       if (data.firstTime) {
         setFirstTime(true)
-        setError(firstTime ? (data.error ?? 'Login failed') : '')
+        setError(firstTime ? (data.error ?? 'Sign-in failed') : '')
         setLoading(false)
         return
       }
-      setError(data.error ?? 'Login failed')
+      setError(data.error ?? 'Sign-in failed')
       setLoading(false)
       return
     }
@@ -44,93 +47,78 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <span className="text-white font-black text-lg">P</span>
+    <AuthLayout>
+      <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+        {firstTime ? 'Create your password' : 'Sign in'}
+      </h1>
+      <p className="mt-1.5 text-sm text-gray-500">
+        {firstTime
+          ? 'This is your first sign-in. Choose a password to secure your account.'
+          : 'Use the email address your administrator approved.'}
+      </p>
+
+      <form onSubmit={handleLogin} className="mt-8 space-y-4">
+        <Field label="Email address">
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="input h-10"
+            placeholder="name@company.com"
+            required
+            autoFocus
+            autoComplete="email"
+            readOnly={firstTime}
+          />
+        </Field>
+
+        <Field label={firstTime ? 'New password' : 'Password'} hint={firstTime ? 'At least 8 characters.' : undefined}>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="input h-10"
+            required
+            autoComplete={firstTime ? 'new-password' : 'current-password'}
+          />
+        </Field>
+
+        {firstTime && (
+          <Field label="Confirm password">
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              className="input h-10"
+              required
+              autoComplete="new-password"
+            />
+          </Field>
+        )}
+
+        {error && (
+          <div className="alert-error" role="alert">
+            <span>
+              {error}
+              {error.toLowerCase().includes('request access') && (
+                <> <a href="/request-access" className="font-medium underline underline-offset-2">Request access</a></>
+              )}
+            </span>
           </div>
-          <h1 className="font-black text-gray-900 text-xl tracking-tight">PONGS</h1>
-          <p className="text-gray-400 text-xs font-semibold tracking-widest uppercase mt-0.5">Stretch Ceiling</p>
-        </div>
+        )}
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h2 className="font-bold text-gray-900 text-lg mb-1">Sign in</h2>
-          <p className="text-gray-500 text-xs mb-5">
-            {firstTime
-              ? 'First sign-in: create a password to secure your account'
-              : 'Enter your email and password to continue'}
-          </p>
+        <button type="submit" disabled={loading || !email || !password} className="btn-primary w-full h-10 text-sm">
+          {loading
+            ? (firstTime ? 'Setting password…' : 'Signing in…')
+            : (<>{firstTime ? 'Set password and sign in' : 'Sign in'} <ArrowRight size={15} /></>)}
+        </button>
+      </form>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="label">Email address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="input w-full"
-                placeholder="you@example.com"
-                required
-                autoFocus
-                autoComplete="email"
-                readOnly={firstTime}
-              />
-            </div>
-
-            <div>
-              <label className="label">{firstTime ? 'New password' : 'Password'}</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="input w-full"
-                placeholder={firstTime ? 'At least 8 characters' : '••••••••'}
-                required
-                autoComplete={firstTime ? 'new-password' : 'current-password'}
-              />
-            </div>
-
-            {firstTime && (
-              <div>
-                <label className="label">Confirm password</label>
-                <input
-                  type="password"
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
-                  className="input w-full"
-                  placeholder="Re-enter password"
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
-                {error}
-                {error.includes('request access') && (
-                  <span> <a href="/request-access" className="underline font-medium">Request access →</a></span>
-                )}
-              </div>
-            )}
-
-            <button type="submit" disabled={loading || !email || !password} className="btn-primary w-full py-2.5 text-sm disabled:opacity-50">
-              {loading
-                ? (firstTime ? 'Setting password…' : 'Signing in…')
-                : (firstTime ? 'Set password & sign in' : 'Continue')}
-            </button>
-          </form>
-
-          <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-500">
-              Don&apos;t have access?{' '}
-              <a href="/request-access" className="text-gray-900 font-semibold hover:underline">Request access</a>
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+      <p className="mt-8 text-[13px] text-gray-500">
+        New to the team?{' '}
+        <a href="/request-access" className="font-medium text-gray-900 underline-offset-2 hover:underline">Request access</a>
+      </p>
+    </AuthLayout>
   )
 }
 

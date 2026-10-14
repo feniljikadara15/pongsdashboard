@@ -1,33 +1,36 @@
 'use client'
 import { useState } from 'react'
+import { ArrowUpRight, HardHat } from 'lucide-react'
 
-export default function ConvertToProjectButton({ quoteId, status }: { quoteId: string; status: string }) {
+// Converts a quote into a project. When a project already exists for the quote
+// we link to it instead of offering a second conversion.
+export default function ConvertToProjectButton({ quoteId, projectId }: { quoteId: string; projectId: string | null }) {
   const [converting, setConverting] = useState(false)
-  const [done, setDone] = useState(status === 'approved')
+
+  if (projectId) {
+    return (
+      <a href={`/projects/${projectId}`} className="btn-secondary">
+        <HardHat size={14} /> View project <ArrowUpRight size={13} className="text-gray-400" />
+      </a>
+    )
+  }
 
   const convert = async () => {
-    if (!confirm('Convert this quote to a project? The quote will be marked as Won.')) return
+    if (!confirm('Create a project from this quote? The quote will be marked as approved.')) return
     setConverting(true)
     const r = await fetch(`/api/quotes/${quoteId}/to-project`, { method: 'POST' })
-    const data = await r.json()
+    const data = await r.json().catch(() => ({}))
     setConverting(false)
     if (data.project_id) {
-      setDone(true)
       window.location.href = `/projects/${data.project_id}`
+    } else {
+      alert(data.error ?? 'Could not create the project.')
     }
   }
 
-  if (done) {
-    return <span className="text-xs bg-green-100 text-green-700 px-3 py-2 rounded-lg font-medium">✓ Converted to Project</span>
-  }
-
   return (
-    <button
-      onClick={convert}
-      disabled={converting}
-      className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg font-medium transition-colors disabled:opacity-60"
-    >
-      {converting ? 'Converting...' : '→ Convert to Project'}
+    <button onClick={convert} disabled={converting} className="btn-secondary">
+      <HardHat size={14} /> {converting ? 'Creating project…' : 'Convert to project'}
     </button>
   )
 }

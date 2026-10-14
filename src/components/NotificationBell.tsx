@@ -16,7 +16,7 @@ export default function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch('/api/notifications').then(r => r.json()).then(setData).catch(() => {})
+    fetch('/api/notifications').then(r => (r.ok ? r.json() : null)).then(setData).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -28,47 +28,63 @@ export default function NotificationBell() {
   }, [])
 
   const total = data?.total ?? 0
+  const jobs = data?.todayJobs ?? []
+  const low = data?.lowStock ?? []
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)} className="relative p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors" aria-label="Notifications">
-        <Bell size={16} />
-        {total > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">{total > 99 ? '99+' : total}</span>
-        )}
+      <button onClick={() => setOpen(o => !o)} className="relative btn-ghost btn-icon" aria-label={`Notifications${total ? `, ${total} unread` : ''}`}>
+        <Bell size={16} strokeWidth={1.75} />
+        {total > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />}
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <p className="text-sm font-bold text-gray-900">Notifications</p>
-            <span className="text-[10px] text-gray-400">{total} new</span>
+        <div className="absolute right-0 mt-2 w-[340px] max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white shadow-lg z-50 overflow-hidden animate-scale-in origin-top-right">
+          <div className="flex items-center justify-between px-4 h-11 border-b border-gray-100">
+            <p className="text-[13px] font-semibold text-gray-900">Notifications</p>
+            {total > 0 && <span className="text-xs text-gray-500 tabular-nums">{total} open</span>}
           </div>
-          <div className="max-h-96 overflow-y-auto">
-            {total === 0 && <p className="px-4 py-8 text-center text-xs text-gray-400">You&apos;re all caught up</p>}
+          <div className="max-h-[400px] overflow-y-auto">
+            {total === 0 && (
+              <div className="px-4 py-10 text-center">
+                <p className="text-[13px] font-medium text-gray-900">Nothing needs attention</p>
+                <p className="text-xs text-gray-500 mt-0.5">Jobs due today and low stock show up here.</p>
+              </div>
+            )}
 
-            {(data?.todayJobs ?? []).map(j => (
-              <a key={j.id} href="/projects" className="flex items-start gap-2.5 px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
-                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0"><CalendarClock size={14} /></div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-900 truncate">Job today: {j.name}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{j.client_name}{j.team_lead ? ` · ${j.team_lead}` : ''}</p>
-                </div>
+            {jobs.length > 0 && <SectionLabel>Scheduled today</SectionLabel>}
+            {jobs.map(j => (
+              <a key={j.id} href={`/projects/${j.id}`} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-50 text-sky-700"><CalendarClock size={14} /></span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-medium text-gray-900">{j.name}</span>
+                  <span className="block truncate text-xs text-gray-500">{j.client_name}{j.team_lead ? ` · ${j.team_lead}` : ''}</span>
+                </span>
               </a>
             ))}
 
-            {(data?.lowStock ?? []).map(p => (
-              <a key={p.id} href="/inventory/reorder" className="flex items-start gap-2.5 px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
-                <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0"><AlertTriangle size={14} /></div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-900 truncate">Low stock: {p.name}</p>
-                  <p className="text-[11px] text-gray-500">{p.current_stock} left (min {p.min_stock})</p>
-                </div>
+            {low.length > 0 && <SectionLabel>Below minimum stock</SectionLabel>}
+            {low.map(p => (
+              <a key={p.id} href="/inventory/reorder" className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-700"><AlertTriangle size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-gray-900">{p.name}</span>
+                  <span className="block text-xs text-gray-500 tabular-nums">{p.current_stock} in stock · minimum {p.min_stock}</span>
+                </span>
               </a>
             ))}
           </div>
+          {low.length > 0 && (
+            <a href="/inventory/reorder" className="block border-t border-gray-100 px-4 h-10 leading-10 text-center text-xs font-medium text-gray-700 hover:bg-gray-50">
+              View reorder list
+            </a>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="px-4 pt-3 pb-1 text-2xs font-medium text-gray-500">{children}</p>
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trash2, ChevronDown, AlertTriangle, RotateCcw } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, ManualRates } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
@@ -10,13 +10,13 @@ import { SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT, LED_WATTS_PER_M } from '
 const FABRIC_OPTIONS = Object.keys(FABRIC)
 
 const LIGHT_OPTIONS: { value: LightType; label: string; note?: string }[] = [
-  { value: 'none', label: 'No Lighting' },
-  { value: 'single_color', label: 'Single Colour', note: 'Fixed white, non-dimmable' },
-  { value: 'single_color_dimmable', label: 'Single Colour Dimmable', note: 'DALI-2 or non-DALI' },
-  { value: 'tunable', label: 'Tunable White', note: 'Variable warm↔cool' },
-  { value: 'tunable_dali', label: 'Tunable (DALI at site)', note: 'DT8 + DA4m on-site' },
-  { value: 'rgb', label: 'RGB', note: 'Color changing' },
-  { value: 'rgbw', label: 'RGBW / NW / WW', note: 'RGB + white' },
+  { value: 'none', label: 'No lighting', note: 'Fabric only' },
+  { value: 'single_color', label: 'Single colour', note: 'Fixed white, non-dimmable' },
+  { value: 'single_color_dimmable', label: 'Single colour dimmable', note: 'DALI-2 or non-DALI' },
+  { value: 'tunable', label: 'Tunable white', note: 'Warm to cool' },
+  { value: 'tunable_dali', label: 'Tunable, DALI at site', note: 'DT8 + DA4m on site' },
+  { value: 'rgb', label: 'RGB', note: 'Colour changing' },
+  { value: 'rgbw', label: 'RGBW / NW / WW', note: 'RGB plus white' },
 ]
 
 const GRIPPER_OPTIONS: GripperType[] = ['CW', 'CC', 'Profile', 'Flexible CW', 'Flexible CC']
@@ -62,6 +62,62 @@ interface Props {
   onRemove: () => void
 }
 
+// Segmented single-choice control used for every small option set in the form.
+function Seg<T extends string | number | boolean | undefined>({
+  value, options, onChange, ariaLabel,
+}: {
+  value: T
+  options: readonly (readonly [T, string])[]
+  onChange: (v: T) => void
+  ariaLabel?: string
+}) {
+  return (
+    <div className="segmented flex-wrap" role="radiogroup" aria-label={ariaLabel}>
+      {options.map(([val, label]) => (
+        <button key={String(val)} type="button" role="radio" aria-checked={value === val}
+          data-active={value === val} onClick={() => onChange(val)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="px-5 py-5 border-t border-gray-100 first:border-t-0">
+      <div className="mb-4">
+        <h4 className="text-[13px] font-semibold text-gray-900">{title}</h4>
+        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </div>
+  )
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="hint">{children}</p>
+}
+
+function UnitSelect({ value, onChange, className = 'w-[88px]' }: { value: UnitSystem; onChange: (u: UnitSystem) => void; className?: string }) {
+  return (
+    <select className={`select ${className}`} value={value} onChange={e => onChange(e.target.value as UnitSystem)} aria-label="Unit">
+      <option value="mm">mm</option>
+      <option value="feet">feet</option>
+      <option value="meters">m</option>
+    </select>
+  )
+}
+
+function CalcRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] gap-3 py-1.5">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className="text-gray-800 tabular-nums">{children}</dd>
+    </div>
+  )
+}
+
 export default function CeilingItemForm({ item, index, priceTier, installRatePerSqft, manualRates, onChange, onRemove }: Props) {
   const [open, setOpen] = useState(true)
 
@@ -104,579 +160,427 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
   }, [item, priceTier, installRatePerSqft, manualRates])
 
   const stripCount = hasLights ? Math.max(1, Math.floor((item.lightDepth ?? 6) / 6)) : 0
+  const hasSize = d.dim1 > 0 || d.dim2 > 0 || d.diameter > 0
+  const lightLabel = LIGHT_OPTIONS.find(o => o.value === item.lightType)?.label ?? ''
+  const summary = [
+    hasSize ? (item.shape === 'circle' ? `${d.diameter} ${item.unit} dia.` : `${d.dim1 ?? 0} × ${d.dim2 ?? 0} ${item.unit}`) : null,
+    item.fabricType,
+    hasLights ? lightLabel : null,
+    item.quantity > 1 ? `Qty ${item.quantity}` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card">
       {/* Item header */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors"
+        className={`flex items-center gap-3 px-5 h-14 cursor-pointer select-none ${open ? 'border-b border-gray-200' : ''}`}
         onClick={() => setOpen(o => !o)}
       >
-        <div className="flex items-center gap-3">
-          <span className="w-6 h-6 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
-            {index + 1}
-          </span>
-          <div>
-            <span className="font-semibold text-slate-800 text-sm">
-              {item.name || `Ceiling Item ${index + 1}`}
-            </span>
-            {!open && (d.dim1 > 0 || d.dim2 > 0) && (
-              <span className="text-xs text-slate-500 ml-2">
-                {d.dim1} × {d.dim2} {item.unit} · {item.fabricType}
-              </span>
-            )}
-          </div>
+        <span className="flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md bg-gray-100 text-xs font-semibold text-gray-700 tabular-nums">
+          {index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-gray-900">{item.name || `Ceiling item ${index + 1}`}</p>
+          <p className="truncate text-xs text-gray-500">{summary || 'Enter dimensions to price this item'}</p>
         </div>
-        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-          <button onClick={onRemove} className="btn-danger px-2 py-1 text-xs" title="Remove item">
-            <Trash2 size={13} />
+        {preview && hasSize && (
+          <span className="hidden sm:block text-[13px] font-semibold text-gray-900 tabular-nums">{fmtINR(preview.itemTotal)}</span>
+        )}
+        <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+          <button type="button" onClick={onRemove} className="btn-ghost btn-icon text-gray-400 hover:text-red-700 hover:bg-red-50" title="Remove item" aria-label="Remove item">
+            <Trash2 size={15} />
           </button>
-          <button className="btn-ghost px-2 py-1" onClick={() => setOpen(o => !o)}>
-            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <button type="button" className="btn-ghost btn-icon" onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse item' : 'Expand item'} aria-expanded={open}>
+            <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </div>
 
       {open && (
-        <div className="px-5 py-5 space-y-5">
-          {/* Row 1: Name + Surface + Quantity */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="col-span-2">
-              <label className="label">Item Name / Location</label>
-              <input
-                className="input"
-                placeholder="e.g. Master Bedroom"
-                value={item.name}
-                onChange={e => set('name', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="label">Surface</label>
-              <div className="flex gap-2">
-                {(['ceiling', 'wall'] as SurfaceType[]).map(s => (
-                  <button
-                    key={s} type="button"
-                    onClick={() => onChange({ ...item, surface: s, gripperType: s === 'ceiling' ? 'CW' : 'CC' })}
-                    className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-all ${
-                      item.surface === s
-                        ? 'border-slate-700 bg-slate-800 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </button>
-                ))}
+        <div>
+          {/* Size and shape */}
+          <Section title="Size and shape">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-4">
+              <div className="col-span-2 sm:col-span-3">
+                <label className="label">Item name or location</label>
+                <input
+                  className="input"
+                  placeholder="Master bedroom"
+                  value={item.name}
+                  onChange={e => set('name', e.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">Surface</label>
+                <Seg ariaLabel="Surface" value={item.surface} options={[['ceiling', 'Ceiling'], ['wall', 'Wall']] as const}
+                  onChange={s => onChange({ ...item, surface: s as SurfaceType, gripperType: s === 'ceiling' ? 'CW' : 'CC' })} />
+              </div>
+              <div>
+                <label className="label">Quantity</label>
+                <input
+                  key={`qty-${item.id}`}
+                  type="number" min={1} className="input tabular-nums"
+                  defaultValue={item.quantity}
+                  onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v); else e.target.value = String(item.quantity) }}
+                />
               </div>
             </div>
-            <div>
-              <label className="label">Quantity</label>
-              <input
-                key={`qty-${item.id}`}
-                type="number" min={1} className="input"
-                defaultValue={item.quantity}
-                onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v); else e.target.value = String(item.quantity) }}
-              />
-            </div>
-          </div>
 
-          {/* Row 2: Shape */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Shape</label>
-              <select className="select" value={item.shape} onChange={e => setShape(e.target.value as ShapeType)}>
-                <option value="rectangle">Rectangle / Square</option>
-                <option value="circle">Circle</option>
-                <option value="triangle">Triangle</option>
-                <option value="l-shape">L-Shape</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Row 3: Dimensions — unified dim1 x dim2 + unit dropdown */}
-          <div>
-            <label className="label">Dimensions</label>
-            {item.shape === 'rectangle' && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="number" step="1" min="0" className="input max-w-[160px]"
-                  placeholder="Dim 1"
-                  value={d.dim1 || ''}
-                  onChange={e => setDim('dim1', parseFloat(e.target.value) || 0)}
-                />
-                <span className="text-slate-400 font-bold text-lg">×</span>
-                <input
-                  type="number" step="1" min="0" className="input max-w-[160px]"
-                  placeholder="Dim 2"
-                  value={d.dim2 || ''}
-                  onChange={e => setDim('dim2', parseFloat(e.target.value) || 0)}
-                />
-                <select
-                  className="select max-w-[100px]"
-                  value={item.unit}
-                  onChange={e => set('unit', e.target.value as UnitSystem)}
-                >
-                  <option value="mm">mm</option>
-                  <option value="feet">feet</option>
-                  <option value="meters">m</option>
+            <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-4">
+              <div>
+                <label className="label">Shape</label>
+                <select className="select" value={item.shape} onChange={e => setShape(e.target.value as ShapeType)}>
+                  <option value="rectangle">Rectangle or square</option>
+                  <option value="circle">Circle</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="l-shape">L-shape</option>
                 </select>
               </div>
-            )}
-            {item.shape === 'circle' && (
-              <div className="flex items-center gap-2 max-w-sm">
-                <div className="flex-1">
-                  <span className="text-xs text-slate-500 mb-1 block">Diameter (quoted as bounding square)</span>
-                  <input type="number" step="1" min="0" className="input"
-                    value={d.diameter || ''} onChange={e => setDim('diameter', parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="pt-5">
-                  <select className="select" value={item.unit} onChange={e => set('unit', e.target.value as UnitSystem)}>
-                    <option value="mm">mm</option>
-                    <option value="feet">feet</option>
-                    <option value="meters">m</option>
-                  </select>
-                </div>
+
+              <div>
+                {item.shape === 'rectangle' && (
+                  <>
+                    <label className="label">Dimensions</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" step="1" min="0" className="input tabular-nums"
+                        placeholder="Length" aria-label="Dimension 1"
+                        value={d.dim1 || ''}
+                        onChange={e => setDim('dim1', parseFloat(e.target.value) || 0)}
+                      />
+                      <span className="text-gray-400 text-sm">×</span>
+                      <input
+                        type="number" step="1" min="0" className="input tabular-nums"
+                        placeholder="Width" aria-label="Dimension 2"
+                        value={d.dim2 || ''}
+                        onChange={e => setDim('dim2', parseFloat(e.target.value) || 0)}
+                      />
+                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] shrink-0" />
+                    </div>
+                  </>
+                )}
+                {item.shape === 'circle' && (
+                  <>
+                    <label className="label">Diameter</label>
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <input type="number" step="1" min="0" className="input tabular-nums"
+                        value={d.diameter || ''} onChange={e => setDim('diameter', parseFloat(e.target.value) || 0)} />
+                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] shrink-0" />
+                    </div>
+                    <Hint>Quoted as the bounding square.</Hint>
+                  </>
+                )}
+                {item.shape === 'triangle' && (
+                  <>
+                    <label className="label">Base and height</label>
+                    <div className="flex items-center gap-2">
+                      <input type="number" step="1" min="0" className="input tabular-nums"
+                        placeholder="Base" aria-label="Base"
+                        value={d.dim1 || ''} onChange={e => setDim('dim1', parseFloat(e.target.value) || 0)} />
+                      <span className="text-gray-400 text-sm">×</span>
+                      <input type="number" step="1" min="0" className="input tabular-nums"
+                        placeholder="Height" aria-label="Height"
+                        value={d.dim2 || ''} onChange={e => setDim('dim2', parseFloat(e.target.value) || 0)} />
+                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] shrink-0" />
+                    </div>
+                  </>
+                )}
+                {item.shape === 'l-shape' && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <label className="label">Sections</label>
+                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] h-8 -mt-1.5" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[['length1', 'Section A length'], ['width1', 'Section A width'], ['length2', 'Section B length'], ['width2', 'Section B width']].map(([k, label]) => (
+                        <input key={k} type="number" step="1" min="0" className="input tabular-nums" placeholder={label} aria-label={label}
+                          value={d[k] || ''} onChange={e => setDim(k, parseFloat(e.target.value) || 0)} />
+                      ))}
+                    </div>
+                    <Hint>Two rectangular sections forming the L.</Hint>
+                  </>
+                )}
               </div>
-            )}
+            </div>
+
             {item.shape === 'triangle' && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <input type="number" step="1" min="0" className="input max-w-[160px]"
-                    placeholder="Base (dim1)"
-                    value={d.dim1 || ''} onChange={e => setDim('dim1', parseFloat(e.target.value) || 0)} />
-                  <span className="text-slate-400">×</span>
-                  <input type="number" step="1" min="0" className="input max-w-[160px]"
-                    placeholder="Height (dim2)"
-                    value={d.dim2 || ''} onChange={e => setDim('dim2', parseFloat(e.target.value) || 0)} />
-                  <select className="select max-w-[100px]" value={item.unit} onChange={e => set('unit', e.target.value as UnitSystem)}>
-                    <option value="mm">mm</option>
-                    <option value="feet">feet</option>
-                    <option value="meters">m</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {['side1','side2','side3'].map((s, i) => (
-                    <div key={s}>
-                      <span className="text-xs text-slate-500 mb-1 block">Side {i+1} (perimeter)</span>
-                      <input type="number" step="1" min="0" className="input"
-                        value={d[s] || ''} onChange={e => setDim(s, parseFloat(e.target.value) || 0)} />
-                    </div>
+              <div>
+                <label className="label">Side lengths for perimeter</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['side1', 'side2', 'side3'].map((s, i) => (
+                    <input key={s} type="number" step="1" min="0" className="input tabular-nums" placeholder={`Side ${i + 1}`} aria-label={`Side ${i + 1}`}
+                      value={d[s] || ''} onChange={e => setDim(s, parseFloat(e.target.value) || 0)} />
                   ))}
                 </div>
               </div>
             )}
-            {item.shape === 'l-shape' && (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-500">Two rectangular sections forming the L</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {[['length1','Section A Length'],['width1','Section A Width'],['length2','Section B Length'],['width2','Section B Width']].map(([k,label]) => (
-                    <div key={k}>
-                      <span className="text-xs text-slate-500 mb-1 block">{label}</span>
-                      <input type="number" step="1" min="0" className="input"
-                        value={d[k] || ''} onChange={e => setDim(k, parseFloat(e.target.value) || 0)} />
-                    </div>
-                  ))}
-                </div>
-                <select className="select max-w-[140px]" value={item.unit} onChange={e => set('unit', e.target.value as UnitSystem)}>
-                  <option value="mm">mm</option>
-                  <option value="feet">feet</option>
-                  <option value="meters">m</option>
-                </select>
-              </div>
-            )}
-          </div>
 
-          {/* Joint option — always available for rectangles */}
-          {item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && (
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <label className="label mb-1">Joint Option</label>
-              {neitherFitsRoll && (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
-                  Both dimensions exceed 5m — a joint is required. Select center or off-center below.
-                </p>
-              )}
-              {onlyOneFitsRoll && (
-                <p className="text-xs text-slate-500 mb-2">
-                  {dim1MM > 5000 || dim2MM > 5000
-                    ? `One dimension exceeds 5m max roll width — without joint, the fabric is oriented so the fitting dimension is the roll axis. With joint, the larger dimension is split so each piece fits a smaller roll (lower wastage).`
-                    : 'Both dimensions fit within available rolls. A joint reduces billed area when split orientation gives lower wastage.'}
-                </p>
-              )}
-              {!neitherFitsRoll && !onlyOneFitsRoll && (
-                <p className="text-xs text-slate-500 mb-2">
-                  Both dimensions fit available rolls. Without joint, the lower-waste orientation is used automatically. With joint, the fabric is split for even lower wastage or client preference.
-                </p>
-              )}
-              <div className="flex gap-2 flex-wrap">
-                {(['none', 'center', 'off-center'] as JointType[]).map(j => (
-                  <button key={j} type="button"
-                    onClick={() => set('jointType', j)}
-                    className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
-                      item.jointType === j
-                        ? 'border-slate-700 bg-slate-800 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    {j === 'none' ? 'No Joint' : j === 'center' ? 'Center Joint' : 'Off-Center Joint'}
-                  </button>
-                ))}
-              </div>
-              {item.jointType !== 'none' && (
-                <p className="text-xs text-indigo-600 mt-2">
-                  Joint: the larger dimension is split. Each half becomes a roll-axis piece; the smaller dimension is the cut length. See Smart Calc Preview for exact panels and wastage.
-                </p>
-              )}
-              {item.jointType === 'off-center' && (
-                <div className="mt-3 max-w-xs">
-                  <label className="label">Joint Position (mm from one end of the larger dimension)</label>
-                  <input type="number" min="0" className="input"
-                    value={item.jointPosition || ''}
-                    onChange={e => set('jointPosition', parseFloat(e.target.value) || 0)} />
+            {/* Joint option — always available for rectangles */}
+            {item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && (
+              <div className="rounded-md border border-gray-200 bg-gray-50/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] font-medium text-gray-900">Fabric joint</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Split the larger dimension across two rolls.</p>
+                  </div>
+                  <Seg ariaLabel="Joint" value={item.jointType}
+                    options={[['none', 'No joint'], ['center', 'Centre'], ['off-center', 'Off-centre']] as const}
+                    onChange={j => set('jointType', j as JointType)} />
                 </div>
-              )}
-            </div>
-          )}
+                {neitherFitsRoll && (
+                  <div className="alert-warning mt-3">
+                    <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                    <span>Both dimensions exceed the 5 m roll width, so a joint is required. Choose centre or off-centre.</span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+                  {onlyOneFitsRoll
+                    ? (dim1MM > 5000 || dim2MM > 5000
+                      ? 'One dimension exceeds the 5 m roll. Without a joint the fitting dimension becomes the roll axis; with a joint the larger dimension is split onto smaller rolls for lower wastage.'
+                      : 'Both dimensions fit available rolls. A joint reduces billed area when a split orientation wastes less.')
+                    : !neitherFitsRoll
+                      ? 'Both dimensions fit available rolls. Without a joint the lower-waste orientation is used automatically.'
+                      : null}
+                  {item.jointType !== 'none' && ' Each half becomes a roll-axis piece and the smaller dimension is the cut length.'}
+                </p>
+                {item.jointType === 'off-center' && (
+                  <div className="mt-3 max-w-xs">
+                    <label className="label">Joint position from one end (mm)</label>
+                    <input type="number" min="0" className="input tabular-nums"
+                      value={item.jointPosition || ''}
+                      onChange={e => set('jointPosition', parseFloat(e.target.value) || 0)} />
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
 
           {/* Fabric */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Fabric Type</label>
-              <select className="select" value={item.fabricType} onChange={e => set('fabricType', e.target.value)}>
-                {FABRIC_OPTIONS.map(f => <option key={f}>{f}</option>)}
-              </select>
+          <Section title="Fabric and fixing">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="label">Fabric</label>
+                <select className="select" value={item.fabricType} onChange={e => set('fabricType', e.target.value)}>
+                  {FABRIC_OPTIONS.map(f => <option key={f}>{f}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Gripper</label>
+                <select className="select" value={item.gripperType}
+                  onChange={e => set('gripperType', e.target.value as GripperType)}>
+                  {GRIPPER_OPTIONS.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 pt-5">
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input type="checkbox" className="rounded border-slate-300"
-                  checked={item.withPrinting}
-                  onChange={e => set('withPrinting', e.target.checked)} />
-                Add Printing Charges
-              </label>
-              {item.withPrinting && (
-                <div className="ml-6 max-w-[160px]">
-                  <label className="label text-xs">Printing Rate (₹/sqm)</label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {item.shape !== 'circle' && (
+                <div>
+                  <label className="label">Margin per side (mm)</label>
                   <input
-                    type="number" min="0" step="50" className="input text-sm"
-                    placeholder="Standard rate"
-                    value={item.printingRatePerSqm ?? ''}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value)
-                      set('printingRatePerSqm', isNaN(v) ? undefined : v)
+                    key={`margin-${item.id}`}
+                    type="number" min="0" max="500" step="10" className="input tabular-nums"
+                    defaultValue={item.marginMM ?? 0}
+                    onBlur={e => {
+                      const v = parseInt(e.target.value)
+                      set('marginMM', isNaN(v) || v < 0 ? 0 : v)
+                      if (isNaN(v)) e.target.value = String(item.marginMM ?? 0)
                     }}
                   />
-                  <p className="text-xs text-slate-400 mt-0.5">Leave blank for standard</p>
+                  <Hint>Moves to the cut side if it would force a wider roll. Fabric cost only.</Hint>
                 </div>
               )}
-              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input type="checkbox" className="rounded border-slate-300"
-                  checked={item.withFleece}
-                  onChange={e => set('withFleece', e.target.checked)} />
-                Add Felt Pad / Fleece
-              </label>
+              <div className={`space-y-2.5 ${item.shape !== 'circle' ? 'sm:col-span-2 sm:pt-6' : 'sm:col-span-3'}`}>
+                <label className="flex items-center gap-2 text-[13px] text-gray-800 cursor-pointer">
+                  <input type="checkbox" className="checkbox"
+                    checked={item.withPrinting}
+                    onChange={e => set('withPrinting', e.target.checked)} />
+                  Printed fabric
+                </label>
+                {item.withPrinting && (
+                  <div className="ml-6 max-w-[200px]">
+                    <label className="label">Printing rate (₹/sqm)</label>
+                    <input
+                      type="number" min="0" step="50" className="input tabular-nums"
+                      placeholder="Standard rate"
+                      value={item.printingRatePerSqm ?? ''}
+                      onChange={e => {
+                        const v = parseFloat(e.target.value)
+                        set('printingRatePerSqm', isNaN(v) ? undefined : v)
+                      }}
+                    />
+                    <Hint>Leave blank to use the standard rate.</Hint>
+                  </div>
+                )}
+                <label className="flex items-center gap-2 text-[13px] text-gray-800 cursor-pointer">
+                  <input type="checkbox" className="checkbox"
+                    checked={item.withFleece}
+                    onChange={e => set('withFleece', e.target.checked)} />
+                  Felt pad or fleece backing
+                </label>
+              </div>
             </div>
-          </div>
-
-          {/* Fabric margin */}
-          {item.shape !== 'circle' && (
-            <div className="max-w-[220px]">
-              <label className="label">Fabric Margin (mm per side)</label>
-              <input
-                key={`margin-${item.id}`}
-                type="number" min="0" max="500" step="10" className="input"
-                defaultValue={item.marginMM ?? 0}
-                onBlur={e => {
-                  const v = parseInt(e.target.value)
-                  set('marginMM', isNaN(v) || v < 0 ? 0 : v)
-                  if (isNaN(v)) e.target.value = String(item.marginMM ?? 0)
-                }}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Smart: margin moves to cut side if it would jump to a wider roll. Affects fabric cost only.
-              </p>
-            </div>
-          )}
-
-          {/* Gripper */}
-          <div className="max-w-xs">
-            <label className="label">Gripper Type</label>
-            <select className="select" value={item.gripperType}
-              onChange={e => set('gripperType', e.target.value as GripperType)}>
-              {GRIPPER_OPTIONS.map(g => (
-                <option key={g} value={g}>{g} Gripper</option>
-              ))}
-            </select>
-          </div>
+          </Section>
 
           {/* Lighting */}
-          <div>
-            <label className="label">Lighting</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-              {LIGHT_OPTIONS.map(opt => (
-                <button
-                  key={opt.value} type="button"
-                  onClick={() => {
-                    const isSC = opt.value === 'single_color' || opt.value === 'single_color_dimmable'
-                    const defaultSpacing = isSC ? 150 : 125
-                    onChange({ ...item, lightType: opt.value, ledSpacingMM: defaultSpacing })
-                  }}
-                  className={`p-3 rounded-lg border text-left transition-all ${
-                    item.lightType === opt.value
-                      ? 'border-slate-700 bg-slate-800 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="text-sm font-medium">{opt.label}</div>
-                  {opt.note && <div className={`text-xs mt-0.5 ${item.lightType === opt.value ? 'text-slate-300' : 'text-slate-400'}`}>{opt.note}</div>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Light sub-options */}
-          {hasLights && (
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
-              <div>
-                <label className="label">Cove Depth</label>
-                <div className="flex flex-wrap gap-2">
-                  {DEPTH_OPTIONS.map(d => (
-                    <button
-                      key={d} type="button"
-                      onClick={() => set('lightDepth', d)}
-                      className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
-                        item.lightDepth === d
-                          ? 'border-slate-700 bg-slate-800 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >
-                      {d}"
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500 mt-1.5">
-                  {stripCount} strip{stripCount !== 1 ? 's' : ''} at {item.lightDepth}" depth
-                </p>
-              </div>
-              <div>
-                <label className="label">LED Module Width</label>
-                <div className="flex gap-2">
-                  {(['standard', 'wider'] as LEDWidth[]).map(w => (
-                    <button
-                      key={w} type="button"
-                      onClick={() => set('ledWidth', w)}
-                      className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                        item.ledWidth === w
-                          ? 'border-slate-700 bg-slate-800 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >
-                      {w.charAt(0).toUpperCase() + w.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {item.lightType === 'tunable_dali' && (
-                <div>
-                  <label className="label">DALI Driver Type</label>
-                  <div className="flex gap-2">
-                    {([['dt8', 'DT8 150W'], ['da4m', 'DA4m']] as const).map(([val, label]) => (
-                      <button key={val} type="button"
-                        onClick={() => set('daliDriver', val)}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          (item.daliDriver ?? 'dt8') === val
-                            ? 'border-slate-700 bg-slate-800 text-white'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
-                </div>
-              )}
-              {/* Feature 2: Single Colour Dimmable — DALI vs Without DALI */}
-              {item.lightType === 'single_color_dimmable' && (
-                <div>
-                  <label className="label">Dimmable Driver System</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {([[false, 'DALI-2 (DT2 + DA4m)'], [true, 'Without DALI (EV1 + V1 + RT1)']] as const).map(([val, label]) => (
-                      <button key={String(val)} type="button"
-                        onClick={() => onChange({ ...item, dimmableWithoutDali: val, driverOverrides: {} })}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          !!item.dimmableWithoutDali === val
-                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {item.dimmableWithoutDali
-                      ? 'Without DALI: standard drivers · Power Repeaters = drivers · 1 Controller per 3 repeaters · 1 Remote.'
-                      : 'DALI-2: DT2 200W driver (max 13 modules) + DA4m (1 per 3 drivers). Existing behaviour.'}
-                  </p>
-                </div>
-              )}
-              {/* Feature 3: RGB/RGBW — Analog vs DALI system */}
-              {(item.lightType === 'rgb' || item.lightType === 'rgbw') && (
-                <div>
-                  <label className="label">Driver System</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {([[false, 'Analog (V2 + Repeater + Remote)'], [true, 'DALI (DA4M/DA5M per driver)']] as const).map(([val, label]) => (
-                      <button key={String(val)} type="button"
-                        onClick={() => onChange({ ...item, rgbDali: val, driverOverrides: {} })}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                          !!item.rgbDali === val
-                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {item.rgbDali
-                      ? `DALI: one ${item.lightType === 'rgbw' ? 'DA5M' : 'DA4M'} controller per driver · no power repeater or remote.`
-                      : 'Analog: standard drivers + V2 Controller + remote (existing system).'}
-                  </p>
-                </div>
-              )}
-              {(item.lightType === 'single_color' || item.lightType === 'tunable' || (item.lightType === 'single_color_dimmable' && item.dimmableWithoutDali)) && (
-                <div>
-                  <label className="label">Driver Size</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {([
-                      [undefined, 'Auto (best mix)'],
-                      ['600W', '600W'],
-                      ['400W', '400W'],
-                      ['350W', '350W'],
-                      ['200W', '200W'],
-                      ['150W', '150W'],
-                      ['100W', '100W'],
-                      ['50W',  '50W'],
-                    ] as const).map(([val, label]) => (
-                      <button key={val ?? 'auto'} type="button"
-                        onClick={() => onChange({ ...item, preferredDriverWatt: val, driverOverrides: {} })}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                          (item.preferredDriverWatt ?? undefined) === val
-                            ? 'border-slate-700 bg-slate-800 text-white'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">Auto prefers 200W drivers (600W runs hot and needs a fan — avoided unless necessary). Override to force a single size.</p>
-                </div>
-              )}
-              {/* Looped / Non-Looped lighting configuration */}
-              <div>
-                <label className="label">Lighting Configuration</label>
-                <div className="flex gap-2">
-                  {([['non_looped', 'Non-Looped'], ['looped', 'Looped']] as const).map(([val, label]) => (
-                    <button key={val} type="button"
-                      onClick={() => onChange({ ...item, lightingConfig: val, driverOverrides: {} })}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                        (item.lightingConfig ?? 'non_looped') === val
-                          ? 'border-slate-700 bg-slate-800 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >{label}</button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {(item.lightingConfig ?? 'non_looped') === 'looped'
-                    ? 'Looped: all pieces run as one continuous system — drivers sized once from combined wattage (usually fewer drivers).'
-                    : 'Non-Looped: each ceiling is an independent circuit — drivers calculated per piece × quantity.'}
-                </p>
-              </div>
-              {/* Feature 1: Item Looping — loop this item together with other items */}
-              <div>
-                <label className="label">Item Loop Group</label>
-                <div className="flex gap-2 flex-wrap">
-                  {([[0, 'None'], [1, 'Group 1'], [2, 'Group 2'], [3, 'Group 3']] as const).map(([val, label]) => (
-                    <button key={val} type="button"
-                      onClick={() => onChange({ ...item, loopGroup: val || undefined, driverOverrides: {} })}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                        (item.loopGroup ?? 0) === val
-                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                    >{label}</button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Items placed in the same group are looped together — their LED wattage is combined and drivers are sized once for the whole group. Set the same group on the items you want to loop (e.g. Item 1 &amp; Item 4).
-                </p>
-              </div>
-              {/* 12-dot module option for single colour */}
-              {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') && (
-                <div>
-                  <label className="label">Module Type</label>
-                  <div className="flex gap-2">
-                    {([['standard', 'Standard'], ['12dot', '12 Dot']] as const).map(([val, label]) => (
-                      <button key={val} type="button"
-                        onClick={() => set('ledModuleType', val)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                          (item.ledModuleType ?? 'standard') === val
-                            ? 'border-slate-700 bg-slate-800 text-white'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                        }`}
-                      >{label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">12 Dot = 12-dot/m module (same 13W/m)</p>
-                </div>
-              )}
-              <div className="max-w-[160px]">
-                <label className="label">Strip Gap (mm)</label>
-                <input
-                  key={`spacing-${item.id}`}
-                  type="number" min="50" max="500" step="5" className="input"
-                  defaultValue={item.ledSpacingMM ?? 125}
-                  onBlur={e => {
-                    const v = parseFloat(e.target.value)
-                    if (!isNaN(v) && v > 0) set('ledSpacingMM', v)
-                    else e.target.value = String(item.ledSpacingMM ?? 125)
-                  }}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Default: {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') ? '150' : '125'}mm
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Smart calc mini-panel */}
-          {preview && (d.dim1 > 0 || d.dim2 > 0 || d.diameter > 0) && (
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-800 space-y-1">
-              <p className="font-semibold text-indigo-900 mb-2">Smart Calc Preview</p>
-              {preview.fabricDetail.panels.map((panel, i) => (
-                <p key={i}>• {preview.fabricDetail.panels.length > 1 ? `Panel ${i+1}: ` : ''}Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
-              ))}
-              {preview.fabricDetail.panels.length > 1 ? (
-                <p>• Total billed fabric: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
-              ) : (
-                <p>• Fabric billed: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
-              )}
-              {preview.ledDetail && (
-                <p>• LED: {preview.ledDetail.stripCount * item.quantity} strip{preview.ledDetail.stripCount * item.quantity > 1 ? 's' : ''}{item.quantity > 1 ? ` (${preview.ledDetail.stripCount}×${item.quantity})` : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {round2(preview.ledDetail.totalRunningMeters * item.quantity)} mtr running | {round2(preview.ledDetail.totalWatts * item.quantity)}W total</p>
-              )}
-              {(() => {
-                const panels = preview.fabricDetail.panels
-                const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
-                // Gripper comes in 1m lengths — always rounded UP to whole metres per ceiling
-                const gripperQty = hasJoint
-                  ? Math.ceil(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
-                  : Math.ceil(preview.perimeterM)
-                const jointNote = hasJoint
-                  ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
-                  : ''
+          <Section title="Lighting">
+            <div role="radiogroup" aria-label="Lighting" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              {LIGHT_OPTIONS.map(opt => {
+                const on = item.lightType === opt.value
                 return (
-                  <p>• Gripper: {gripperQty * item.quantity} rmt {item.gripperType}{item.quantity > 1 ? ` (${gripperQty} × ${item.quantity})` : ''} — rounded up to whole metres{jointNote}</p>
+                  <button
+                    key={opt.value} type="button" role="radio" aria-checked={on}
+                    onClick={() => {
+                      const isSC = opt.value === 'single_color' || opt.value === 'single_color_dimmable'
+                      const defaultSpacing = isSC ? 150 : 125
+                      onChange({ ...item, lightType: opt.value, ledSpacingMM: defaultSpacing })
+                    }}
+                    className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                      on ? 'border-brand-600 bg-brand-50/60 ring-1 ring-brand-600' : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <span className={`block text-[13px] font-medium ${on ? 'text-brand-800' : 'text-gray-900'}`}>{opt.label}</span>
+                    {opt.note && <span className={`block text-xs mt-0.5 ${on ? 'text-brand-700/80' : 'text-gray-500'}`}>{opt.note}</span>}
+                  </button>
                 )
-              })()}
+              })}
+            </div>
+
+            {/* Light sub-options */}
+            {hasLights && (
+              <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
+                <OptionRow label="Cove depth" hint={`${stripCount} strip${stripCount !== 1 ? 's' : ''} at ${item.lightDepth}" depth`}>
+                  <Seg ariaLabel="Cove depth" value={item.lightDepth}
+                    options={DEPTH_OPTIONS.map(dp => [dp, `${dp}"`] as const)}
+                    onChange={v => set('lightDepth', v as number)} />
+                </OptionRow>
+                <OptionRow label="LED module width">
+                  <Seg ariaLabel="LED module width" value={item.ledWidth} options={[['standard', 'Standard'], ['wider', 'Wider']] as const}
+                    onChange={w => set('ledWidth', w as LEDWidth)} />
+                </OptionRow>
+                {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') && (
+                  <OptionRow label="Module type" hint="12 dot is a 12-dot/m module at the same 13 W/m.">
+                    <Seg ariaLabel="Module type" value={item.ledModuleType ?? 'standard'} options={[['standard', 'Standard'], ['12dot', '12 dot']] as const}
+                      onChange={v => set('ledModuleType', v as 'standard' | '12dot')} />
+                  </OptionRow>
+                )}
+                {item.lightType === 'tunable_dali' && (
+                  <OptionRow label="DALI driver" hint="Maximum 10 modules per driver. One DA4m per 3 DT8.">
+                    <Seg ariaLabel="DALI driver" value={item.daliDriver ?? 'dt8'} options={[['dt8', 'DT8 150W'], ['da4m', 'DA4m']] as const}
+                      onChange={v => set('daliDriver', v as 'dt8' | 'da4m')} />
+                  </OptionRow>
+                )}
+                {/* Single Colour Dimmable — DALI vs Without DALI */}
+                {item.lightType === 'single_color_dimmable' && (
+                  <OptionRow label="Dimming system"
+                    hint={item.dimmableWithoutDali
+                      ? 'Standard drivers, one power repeater per driver, one controller per 3 repeaters, one remote.'
+                      : 'DT2 200W driver (maximum 13 modules) with one DA4m per 3 drivers.'}>
+                    <Seg ariaLabel="Dimming system" value={!!item.dimmableWithoutDali}
+                      options={[[false, 'DALI-2'], [true, 'Without DALI']] as const}
+                      onChange={v => onChange({ ...item, dimmableWithoutDali: v as boolean, driverOverrides: {} })} />
+                  </OptionRow>
+                )}
+                {/* RGB/RGBW — Analog vs DALI system */}
+                {(item.lightType === 'rgb' || item.lightType === 'rgbw') && (
+                  <OptionRow label="Driver system"
+                    hint={item.rgbDali
+                      ? `One ${item.lightType === 'rgbw' ? 'DA5M' : 'DA4M'} controller per driver. No repeater or remote.`
+                      : 'Standard drivers with V2 controller, repeater and remote.'}>
+                    <Seg ariaLabel="Driver system" value={!!item.rgbDali}
+                      options={[[false, 'Analog'], [true, 'DALI']] as const}
+                      onChange={v => onChange({ ...item, rgbDali: v as boolean, driverOverrides: {} })} />
+                  </OptionRow>
+                )}
+                {(item.lightType === 'single_color' || item.lightType === 'tunable' || (item.lightType === 'single_color_dimmable' && item.dimmableWithoutDali)) && (
+                  <OptionRow label="Driver size" hint="Auto prefers 200W drivers. 600W runs hot and needs a fan, so it is avoided unless necessary.">
+                    <Seg ariaLabel="Driver size" value={item.preferredDriverWatt ?? undefined}
+                      options={[[undefined, 'Auto'], ['600W', '600W'], ['400W', '400W'], ['350W', '350W'], ['200W', '200W'], ['150W', '150W'], ['100W', '100W'], ['50W', '50W']] as const}
+                      onChange={v => onChange({ ...item, preferredDriverWatt: v as CeilingItem['preferredDriverWatt'], driverOverrides: {} })} />
+                  </OptionRow>
+                )}
+                {/* Looped / Non-Looped lighting configuration */}
+                <OptionRow label="Configuration"
+                  hint={(item.lightingConfig ?? 'non_looped') === 'looped'
+                    ? 'All pieces run as one continuous system. Drivers are sized once from combined wattage.'
+                    : 'Each ceiling is an independent circuit. Drivers are sized per piece, then multiplied by quantity.'}>
+                  <Seg ariaLabel="Lighting configuration" value={item.lightingConfig ?? 'non_looped'}
+                    options={[['non_looped', 'Non-looped'], ['looped', 'Looped']] as const}
+                    onChange={v => onChange({ ...item, lightingConfig: v as 'looped' | 'non_looped', driverOverrides: {} })} />
+                </OptionRow>
+                {/* Item Looping — loop this item together with other items */}
+                <OptionRow label="Loop group" hint="Items in the same group share drivers sized from their combined wattage.">
+                  <Seg ariaLabel="Loop group" value={item.loopGroup ?? 0}
+                    options={[[0, 'None'], [1, 'Group 1'], [2, 'Group 2'], [3, 'Group 3']] as const}
+                    onChange={v => onChange({ ...item, loopGroup: (v as number) || undefined, driverOverrides: {} })} />
+                </OptionRow>
+                <OptionRow label="Strip gap (mm)"
+                  hint={`Default ${(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') ? '150' : '125'} mm.`}>
+                  <input
+                    key={`spacing-${item.id}`}
+                    type="number" min="50" max="500" step="5" className="input w-28 tabular-nums"
+                    defaultValue={item.ledSpacingMM ?? 125}
+                    onBlur={e => {
+                      const v = parseFloat(e.target.value)
+                      if (!isNaN(v) && v > 0) set('ledSpacingMM', v)
+                      else e.target.value = String(item.ledSpacingMM ?? 125)
+                    }}
+                  />
+                </OptionRow>
+              </div>
+            )}
+          </Section>
+
+          {/* Calculation panel */}
+          {preview && hasSize && (
+            <Section title="Calculation" description="Derived from the dimensions and options above.">
+              <dl className="rounded-md border border-gray-200 bg-gray-50/70 px-4 py-2 text-[13px] divide-y divide-gray-200/70">
+                {preview.fabricDetail.panels.map((panel, i) => (
+                  <CalcRow key={i} label={preview.fabricDetail.panels.length > 1 ? `Panel ${i + 1}` : 'Fabric roll'}>
+                    {panel.orientation}
+                    <span className="text-gray-500"> · waste {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</span>
+                  </CalcRow>
+                ))}
+                <CalcRow label="Fabric billed">
+                  {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm
+                  {item.quantity > 1 && <span className="text-gray-500"> ({preview.fabricDetail.totalBilledArea.toFixed(2)} × {item.quantity})</span>}
+                </CalcRow>
+                {preview.ledDetail && (
+                  <CalcRow label="LED">
+                    {preview.ledDetail.stripCount * item.quantity} strip{preview.ledDetail.stripCount * item.quantity > 1 ? 's' : ''}
+                    {item.quantity > 1 && <span className="text-gray-500"> ({preview.ledDetail.stripCount} × {item.quantity})</span>}
+                    {' '}× {preview.ledDetail.runningLengthM.toFixed(2)} m = {round2(preview.ledDetail.totalRunningMeters * item.quantity)} m
+                    <span className="text-gray-500"> · {round2(preview.ledDetail.totalWatts * item.quantity)} W</span>
+                  </CalcRow>
+                )}
+                {(() => {
+                  const panels = preview.fabricDetail.panels
+                  const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
+                  // Gripper comes in 1m lengths — always rounded UP to whole metres per ceiling
+                  const gripperQty = hasJoint
+                    ? Math.ceil(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
+                    : Math.ceil(preview.perimeterM)
+                  const jointNote = hasJoint
+                    ? panels.map((p, i) => `P${i + 1}: 2 × (${p.physicalWidth.toFixed(2)} + ${p.cutLength.toFixed(2)}) m`).join(', ')
+                    : ''
+                  return (
+                    <CalcRow label="Gripper">
+                      {gripperQty * item.quantity} rmt {item.gripperType}
+                      {item.quantity > 1 && <span className="text-gray-500"> ({gripperQty} × {item.quantity})</span>}
+                      <span className="text-gray-500"> · rounded up to whole metres</span>
+                      {jointNote && <span className="block text-xs text-gray-500 mt-0.5">{jointNote}</span>}
+                    </CalcRow>
+                  )
+                })()}
+              </dl>
+
               {/* Drivers & Controls with manual override */}
               {(() => {
                 const driverItems = preview.lineItems.filter(l => l.unit === 'nos')
                 if (!driverItems.length) return null
-                // We need the "auto-calculated" qty before overrides — re-derive from overrides map
-                // The preview already has overrides applied, so we read calculated qty from a fresh preview without overrides
+                // The preview already has overrides applied, so read the auto qty from a fresh preview without overrides
                 const autoPreview = (() => {
                   try {
                     return calculateItem({ ...item, driverOverrides: {} }, priceTier, installRatePerSqft, manualRates)
@@ -684,20 +588,24 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                 })()
                 const autoItems = autoPreview?.lineItems.filter(l => l.unit === 'nos') ?? []
                 return (
-                  <div className="mt-2 pt-2 border-t border-indigo-200">
-                    <p className="font-semibold text-indigo-900 mb-1.5">Drivers &amp; Controls <span className="font-normal text-indigo-600">(edit qty freely)</span></p>
-                    <div className="space-y-1.5">
+                  <div className="rounded-md border border-gray-200">
+                    <div className="flex items-center justify-between px-4 h-9 border-b border-gray-200 bg-gray-50 rounded-t-md">
+                      <span className="text-xs font-medium text-gray-700">Drivers and controls</span>
+                      <span className="text-xs text-gray-500">Quantities can be overridden</span>
+                    </div>
+                    <ul className="divide-y divide-gray-100">
                       {autoItems.map((auto, i) => {
                         const overrideVal = (item.driverOverrides ?? {})[auto.description]
                         const displayQty = overrideVal !== undefined ? overrideVal : auto.qty
                         const isOverridden = overrideVal !== undefined && overrideVal !== auto.qty
                         return (
-                          <div key={i} className="flex items-center gap-2">
+                          <li key={i} className="flex items-center gap-3 px-4 py-2">
                             <input
                               type="number"
                               min={0}
                               key={`${auto.description}-${auto.qty}-${overrideVal ?? 'x'}`}
                               defaultValue={displayQty}
+                              aria-label={`Quantity for ${auto.description}`}
                               onBlur={e => {
                                 const v = parseInt(e.target.value)
                                 if (isNaN(v) || v < 0) return
@@ -709,33 +617,33 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                                 }
                                 onChange({ ...item, driverOverrides: newOv })
                               }}
-                              className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 bg-white text-indigo-900 text-center text-xs"
+                              className={`input h-8 w-16 text-center tabular-nums ${isOverridden ? 'border-amber-300 bg-amber-50' : ''}`}
                             />
-                            <span className="text-indigo-700 text-xs">×</span>
-                            <span className={`text-xs ${isOverridden ? 'text-indigo-600 font-medium' : ''}`}>
+                            <span className="flex-1 min-w-0 text-[13px] text-gray-800 truncate">
                               {auto.description.replace(/ \[.*?\]/, '')}
                             </span>
                             {isOverridden && (
-                              <span className="text-indigo-400 text-xs">(auto: {auto.qty})</span>
+                              <>
+                                <span className="text-xs text-gray-500 tabular-nums whitespace-nowrap">Auto {auto.qty}</span>
+                                <button
+                                  type="button"
+                                  className="btn-ghost btn-xs"
+                                  onClick={() => {
+                                    const newOv = { ...(item.driverOverrides ?? {}) }
+                                    delete newOv[auto.description]
+                                    onChange({ ...item, driverOverrides: newOv })
+                                  }}
+                                ><RotateCcw size={12} /> Reset</button>
+                              </>
                             )}
-                            {isOverridden && (
-                              <button
-                                type="button"
-                                className="text-indigo-400 underline text-xs ml-1"
-                                onClick={() => {
-                                  const newOv = { ...(item.driverOverrides ?? {}) }
-                                  delete newOv[auto.description]
-                                  onChange({ ...item, driverOverrides: newOv })
-                                }}
-                              >reset</button>
-                            )}
-                          </div>
+                          </li>
                         )
                       })}
-                    </div>
+                    </ul>
                   </div>
                 )
               })()}
+
               {/* Advisory: manual driver capacity vs auto best mix (>30% = warn, never blocks) */}
               {(() => {
                 if (!item.preferredDriverWatt || !preview.ledDetail) return null
@@ -750,28 +658,44 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                 const warning = manualDriverWarning(totalModules, wattsPerM, item.preferredDriverWatt)
                 if (!warning) return null
                 return (
-                  <div className="mt-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-xs flex gap-2">
-                    <span className="shrink-0">⚠</span>
+                  <div className="alert-warning">
+                    <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                     <span>{warning}</span>
                   </div>
                 )
               })()}
-              <p className="font-semibold pt-1">Item total{item.quantity > 1 ? ` (×${item.quantity})` : ''}: {fmtINR(preview.itemTotal)}</p>
-            </div>
+
+              <div className="flex items-center justify-between rounded-md bg-gray-900 px-4 h-11 text-white">
+                <span className="text-[13px]">Item total{item.quantity > 1 ? ` for ${item.quantity} pieces` : ''}</span>
+                <span className="text-[15px] font-semibold tabular-nums">{fmtINR(preview.itemTotal)}</span>
+              </div>
+            </Section>
           )}
 
           {/* Notes */}
-          <div>
-            <label className="label">Notes (optional)</label>
+          <Section title="Notes">
             <textarea
-              className="input resize-none h-16"
-              placeholder="Special requirements for this ceiling…"
+              className="input resize-none"
+              rows={2}
+              placeholder="Special requirements for this ceiling"
               value={item.notes}
               onChange={e => set('notes', e.target.value)}
             />
-          </div>
+          </Section>
         </div>
       )}
+    </div>
+  )
+}
+
+function OptionRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-2 px-4 py-3 sm:grid-cols-[150px_1fr] sm:items-start">
+      <span className="text-[13px] font-medium text-gray-700 sm:pt-1.5">{label}</span>
+      <div className="min-w-0">
+        {children}
+        {hint && <p className="hint">{hint}</p>}
+      </div>
     </div>
   )
 }
