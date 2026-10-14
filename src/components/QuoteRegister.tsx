@@ -9,6 +9,7 @@ import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { listCompanies } from '@/lib/companies'
 import { PageHeader, Stat, StatGrid, EmptyState, LoadingRows, SearchInput, StatusBadge, statusDot } from '@/components/ui'
+import { fmtDate } from '@/lib/format'
 
 const TIER_LABEL: Record<string, string> = {
   dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifier', manual: 'Manual', manual_custom: 'Custom',
@@ -248,7 +249,7 @@ function QuoteRow({ quote, busy, onDelete, onDuplicate, onRevise, onStatusChange
   const menuRef = useDismiss(menuOpen, closeMenu)
 
   const status = getStatus(quote)
-  const date = quote.date ? new Date(quote.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  const date = fmtDate(quote.date)
   const itemCount = quote.items?.length ?? 0
   const rev = Number(quote.revision ?? 0)
   const grandTotal = totalOf(quote)

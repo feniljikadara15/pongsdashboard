@@ -5,6 +5,7 @@ import { GitBranch, Plus } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { EmptyState, LoadingRows, StatusBadge } from '@/components/ui'
+import { fmtDate } from '@/lib/format'
 
 export default function RevisionTrail({ quoteId }: { quoteId: string }) {
   const [revs, setRevs] = useState<Quote[]>([])
@@ -81,7 +82,7 @@ export default function RevisionTrail({ quoteId }: { quoteId: string }) {
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
                     {[
-                      new Date(q.updatedAt ?? q.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                      fmtDate(q.updatedAt ?? q.createdAt),
                       q.revisedBy ? `by ${q.revisedBy}` : rev === 0 && q.ownerEmail ? `by ${q.ownerEmail}` : null,
                       `${q.items?.length ?? 0} item${(q.items?.length ?? 0) === 1 ? '' : 's'}`,
                     ].filter(Boolean).join(' · ')}

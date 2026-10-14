@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, round2 } from '@/lib/calculations'
 import QuoteHeader from '@/components/QuoteHeader'
+import { fmtDateLong } from '@/lib/format'
 
 const LIGHT_LABEL: Record<string, string> = {
   single_color: 'Single colour', single_color_dimmable: 'Single colour dimmable', tunable: 'Tunable white',
@@ -19,7 +20,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
   const projectId = await dbGetProjectIdForQuote(quote.id)
 
   const bd = calculateQuote(quote)
-  const dateStr = new Date(quote.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+  const dateStr = fmtDateLong(quote.date)
 
   return (
     <div className="animate-fade-in">

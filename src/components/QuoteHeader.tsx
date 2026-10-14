@@ -3,6 +3,7 @@ import type { Quote } from '@/lib/types'
 import { StatusBadge } from '@/components/ui'
 import ConvertToProjectButton from '@/components/ConvertToProjectButton'
 import PrintButton from '@/components/PrintButton'
+import { fmtDate } from '@/lib/format'
 
 const TIER_LABEL: Record<string, string> = {
   dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifier', manual: 'Manual rates', manual_custom: 'Custom lines',
@@ -24,8 +25,8 @@ export default function QuoteHeader({
   printable?: boolean
 }) {
   const rev = Number(quote.revision ?? 0)
-  const date = quote.date ? new Date(quote.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null
-  const valid = quote.validUntil ? new Date(quote.validUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+  const date = quote.date ? fmtDate(quote.date) : null
+  const valid = quote.validUntil ? fmtDate(quote.validUntil) : null
   const tabs: { id: QuoteTab; label: string; href: string }[] = [
     { id: 'overview', label: 'Overview', href: `/quotes/${quote.id}/team` },
     { id: 'internal', label: 'Cost review', href: `/quotes/${quote.id}/internal` },

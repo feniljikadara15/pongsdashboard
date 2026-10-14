@@ -8,6 +8,7 @@ import QuoteHeader from '@/components/QuoteHeader'
 import SharePDF from '@/components/SharePDF'
 
 import { getCompany } from '@/lib/companies'
+import { fmtDateLong } from '@/lib/format'
 
 const HSN_CEILING = '3921'
 
@@ -37,13 +38,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const bd = calculateQuote(quote)
   const isCustom = quote.priceTier === 'manual_custom'
 
-  const dateStr = new Date(quote.date).toLocaleDateString('en-IN', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })
+  const dateStr = fmtDateLong(quote.date)
   const validStr = quote.validUntil
-    ? new Date(quote.validUntil).toLocaleDateString('en-IN', {
-        day: 'numeric', month: 'long', year: 'numeric',
-      })
+    ? fmtDateLong(quote.validUntil)
     : null
 
   const hasLighting = quote.items.some(i => i.lightType !== 'none')

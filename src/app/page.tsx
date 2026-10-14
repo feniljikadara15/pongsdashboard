@@ -5,7 +5,7 @@ import { ArrowRight, CalendarClock, FileText, PackageCheck, Plus } from 'lucide-
 import { useMe, can } from '@/lib/useMe'
 import type { Quote } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
-import { fmtDate } from '@/lib/format'
+import { fmtDate, fmtDateLong, monthShort, toDate } from '@/lib/format'
 import { PageHeader, Stat, StatGrid, StatusBadge, EmptyState, LoadingRows, PageLoading } from '@/components/ui'
 
 type Row = Record<string, unknown>
@@ -68,7 +68,7 @@ export default function HomePage() {
     <div className="animate-fade-in">
       <PageHeader
         title={`${greeting()}${firstName ? `, ${firstName}` : ''}`}
-        description={new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        description={fmtDateLong(new Date(), { weekday: true })}
         actions={canQuotes ? <a href="/quotes/new" className="btn-primary"><Plus size={15} strokeWidth={2.25} /> New quote</a> : undefined}
       />
 
@@ -143,12 +143,12 @@ export default function HomePage() {
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {upcoming.slice(0, 5).map(x => {
-                    const d = new Date(String(x.scheduled_date))
+                    const d = toDate(String(x.scheduled_date)) ?? new Date()
                     return (
                       <li key={String(x.id)}>
                         <a href={`/projects/${x.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
                           <span className="flex w-10 shrink-0 flex-col items-center rounded-md border border-gray-200 bg-white py-1 leading-none">
-                            <span className="text-2xs font-medium uppercase text-gray-500">{d.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                            <span className="text-2xs font-medium uppercase text-gray-500">{monthShort(d)}</span>
                             <span className="mt-0.5 text-[15px] font-semibold tabular-nums text-gray-900">{d.getDate()}</span>
                           </span>
                           <span className="min-w-0 flex-1">

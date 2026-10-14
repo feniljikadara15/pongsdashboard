@@ -1,97 +1,118 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { PageHeader, EmptyState, StatusBadge, statusDot } from '@/components/ui'
+import { PROJECT_STATUS_LABELS } from '@/components/ProjectFormModal'
+import { fmtMonth, fmtDateLong } from '@/lib/format'
 
-type Project = { id: string; name: string; client_name: string; status: string; scheduled_date: string; priority: string }
-const STATUS_COLORS: Record<string, string> = { scheduled:'bg-blue-100 text-blue-700', in_progress:'bg-amber-100 text-amber-700', completed:'bg-green-100 text-green-700', invoiced:'bg-purple-100 text-purple-700' }
+type Project = { id: string; name: string; client_name: string; status: string; scheduled_date: string; priority: string; team_lead?: string; city?: string }
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function CalendarPage() {
+  const now = new Date()
   const [projects, setProjects] = useState<Project[]>([])
-  const [year, setYear] = useState(new Date().getFullYear())
-  const [month, setMonth] = useState(new Date().getMonth())
-  const [selected, setSelected] = useState<string | null>(null)
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth())
+  const [selected, setSelected] = useState<string>(now.toISOString().slice(0, 10))
 
-  useEffect(() => { fetch('/api/projects').then(r=>r.json()).then(setProjects) }, [])
+  useEffect(() => { fetch('/api/projects').then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])) }, [])
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`
+  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`
   const monthProjects = projects.filter(p => p.scheduled_date?.startsWith(monthStr))
-  const byDay: Record<string, Project[]> = {}
-  for (const p of monthProjects) {
-    const day = p.scheduled_date.slice(8, 10)
-    if (!byDay[day]) byDay[day] = []
-    byDay[day].push(p)
+  const byDate: Record<string, Project[]> = {}
+  for (const p of projects) {
+    if (!p.scheduled_date) continue
+    const key = p.scheduled_date.slice(0, 10)
+    ;(byDate[key] ??= []).push(p)
   }
 
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-  const today = new Date().toISOString().slice(0, 10)
-  const selectedProjects = selected ? (byDay[selected] ?? []) : []
+  const today = now.toISOString().slice(0, 10)
+  const selectedProjects = byDate[selected] ?? []
+  const trailing = (7 - ((firstDay + daysInMonth) % 7)) % 7
 
-  function prev() { if (month === 0) { setMonth(11); setYear(y=>y-1) } else setMonth(m=>m-1) }
-  function next() { if (month === 11) { setMonth(0); setYear(y=>y+1) } else setMonth(m=>m+1) }
+  function prev() { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
+  function next() { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+  function goToday() { setYear(now.getFullYear()); setMonth(now.getMonth()); setSelected(today) }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Project Calendar</h1>
-        <div className="flex items-center gap-3">
-          <button onClick={prev} className="btn-secondary text-xs px-3 py-1.5">← Prev</button>
-          <span className="text-sm font-semibold text-gray-700 w-36 text-center">
-            {new Date(year, month).toLocaleDateString('en-IN', { month:'long', year:'numeric' })}
-          </span>
-          <button onClick={next} className="btn-secondary text-xs px-3 py-1.5">Next →</button>
-        </div>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader title="Schedule" description={`${monthProjects.length} installation${monthProjects.length !== 1 ? 's' : ''} scheduled in ${fmtMonth(new Date(year, month)).split(' ')[0]}.`} />
 
-      <div className="grid grid-cols-7 gap-1">
-        {dayNames.map(d => (
-          <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">{d}</div>
-        ))}
-        {[...Array(firstDay)].map((_,i) => <div key={`e${i}`} />)}
-        {[...Array(daysInMonth)].map((_, i) => {
-          const day = String(i+1).padStart(2,'0')
-          const dateStr = `${monthStr}-${day}`
-          const dayProjects = byDay[day] ?? []
-          const isToday = dateStr === today
-          const isSelected = selected === day
-          return (
-            <div key={day} onClick={() => setSelected(isSelected ? null : day)}
-              className={`min-h-[80px] rounded-lg p-1.5 cursor-pointer border transition-all ${isToday ? 'border-amber-400 bg-amber-50' : isSelected ? 'border-blue-400 bg-blue-50' : dayProjects.length ? 'border-gray-200 bg-white hover:border-amber-300' : 'border-gray-100 bg-gray-50 hover:bg-gray-100'}`}>
-              <p className={`text-xs font-bold mb-1 ${isToday ? 'text-amber-600' : 'text-gray-600'}`}>{i+1}</p>
-              {dayProjects.slice(0,2).map(p => (
-                <div key={p.id} className={`text-[10px] px-1 py-0.5 rounded mb-0.5 truncate font-medium ${STATUS_COLORS[p.status] ?? 'bg-gray-100 text-gray-600'}`}>{p.name}</div>
-              ))}
-              {dayProjects.length > 2 && <div className="text-[10px] text-gray-400 font-medium">+{dayProjects.length-2} more</div>}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-4 h-14 border-b border-gray-200">
+            <h2 className="text-[15px] font-semibold text-gray-900">
+              {fmtMonth(new Date(year, month))}
+            </h2>
+            <div className="flex items-center gap-1">
+              <button onClick={goToday} className="btn-secondary btn-sm">Today</button>
+              <button onClick={prev} className="btn-ghost btn-icon" aria-label="Previous month"><ChevronLeft size={16} /></button>
+              <button onClick={next} className="btn-ghost btn-icon" aria-label="Next month"><ChevronRight size={16} /></button>
             </div>
-          )
-        })}
-      </div>
-
-      {selectedProjects.length > 0 && (
-        <div className="card">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            Jobs on {new Date(year, month, parseInt(selected!)).toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long' })}
-          </h3>
-          <div className="space-y-2">
-            {selectedProjects.map(p => (
-              <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                  <p className="text-xs text-gray-500">{p.client_name}</p>
-                </div>
-                <span className={`badge ${STATUS_COLORS[p.status] ?? 'bg-gray-100 text-gray-600'}`}>{p.status.replace('_',' ')}</span>
-              </div>
-            ))}
           </div>
-        </div>
-      )}
 
-      {monthProjects.length === 0 && (
-        <div className="card text-center py-8 text-gray-400">
-          <p className="text-2xl mb-2">📅</p>
-          <p className="font-medium">No projects scheduled this month</p>
-        </div>
-      )}
+          <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+            {DAY_NAMES.map(d => <div key={d} className="py-2 text-center text-xs font-medium text-gray-500">{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 [&>*]:border-gray-100 [&>*:not(:nth-child(7n))]:border-r [&>*]:border-b">
+            {[...Array(firstDay)].map((_, i) => <div key={`lead${i}`} className="min-h-[96px] bg-gray-50/60" />)}
+            {[...Array(daysInMonth)].map((_, i) => {
+              const dateStr = `${monthStr}-${String(i + 1).padStart(2, '0')}`
+              const dayProjects = byDate[dateStr] ?? []
+              const isToday = dateStr === today
+              const isSelected = selected === dateStr
+              return (
+                <button key={dateStr} type="button" onClick={() => setSelected(dateStr)}
+                  className={`flex min-h-[96px] flex-col items-stretch justify-start p-1.5 text-left transition-colors ${isSelected ? 'bg-brand-50/50 ring-1 ring-inset ring-brand-600' : 'hover:bg-gray-50'}`}>
+                  <span className={`inline-flex self-start h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs tabular-nums ${
+                    isToday ? 'bg-brand-700 font-semibold text-white' : 'font-medium text-gray-700'}`}>{i + 1}</span>
+                  <span className="mt-1 block space-y-0.5">
+                    {dayProjects.slice(0, 2).map(p => (
+                      <span key={p.id} className="flex items-center gap-1 rounded px-1 py-0.5 text-2xs text-gray-700 bg-white border border-gray-200 truncate">
+                        <span className={`dot ${statusDot(p.status)}`} />
+                        <span className="truncate">{p.name}</span>
+                      </span>
+                    ))}
+                    {dayProjects.length > 2 && <span className="block px-1 text-2xs font-medium text-gray-500">{dayProjects.length - 2} more</span>}
+                  </span>
+                </button>
+              )
+            })}
+            {[...Array(trailing)].map((_, i) => <div key={`trail${i}`} className="min-h-[96px] bg-gray-50/60" />)}
+          </div>
+        </section>
+
+        <aside className="card self-start">
+          <div className="px-4 h-14 flex flex-col justify-center border-b border-gray-200">
+            <p className="text-[13px] font-semibold text-gray-900">
+              {fmtDateLong(selected, { weekday: true, year: false })}
+            </p>
+            <p className="text-xs text-gray-500">{selectedProjects.length} job{selectedProjects.length !== 1 ? 's' : ''}</p>
+          </div>
+          {selectedProjects.length === 0 ? (
+            <EmptyState icon={CalendarDays} title="Nothing scheduled" description="Select another day on the calendar." compact />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {selectedProjects.map(p => (
+                <li key={p.id}>
+                  <a href={`/projects/${p.id}`} className="block px-4 py-3 hover:bg-gray-50">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[13px] font-medium text-gray-900">{p.name}</p>
+                      <StatusBadge status={p.status} label={PROJECT_STATUS_LABELS[p.status]} />
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {[p.client_name, p.city, p.team_lead ? `Lead: ${p.team_lead}` : null].filter(Boolean).join(' · ')}
+                    </p>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+      </div>
     </div>
   )
 }
