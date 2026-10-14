@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbClient, dbCreateUser, dbLogActivity } from '@/lib/db'
-import { requireAdmin } from '@/lib/session'
+import { requireAdmin, publicUser } from '@/lib/session'
 import { MIN_PASSWORD_LENGTH } from '@/lib/password'
 
 // Listing the user directory is an admin-only capability.
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   sql += ' ORDER BY name'
 
   const result = args.length ? await db.execute(sql, args) : await db.execute(sql)
-  return NextResponse.json(result.rows)
+  return NextResponse.json(result.rows.map(r => publicUser(r as Record<string, unknown>)))
 }
 
 // Only an administrator may create users. Role + permissions are normalised
@@ -39,5 +39,5 @@ export async function POST(req: NextRequest) {
   }
   const created = await dbCreateUser(body)
   await dbLogActivity(auth.user.userId, 'user.create', `Created user ${body.email ?? body.name}`)
-  return NextResponse.json(created, { status: 201 })
+  return NextResponse.json(publicUser(created as Record<string, unknown>), { status: 201 })
 }

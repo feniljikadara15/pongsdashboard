@@ -1,6 +1,9 @@
 'use client'
 import Gate from '@/components/Gate'
 import { useEffect, useState, useCallback } from 'react'
+import { Check, X, Inbox } from 'lucide-react'
+import { PageHeader, Avatar, StatusBadge, EmptyState, LoadingRows, Modal, Field } from '@/components/ui'
+import { fmtDate } from '@/lib/format'
 
 type Request = {
   id: string; name: string; email: string; phone: string; city: string;
@@ -8,11 +11,9 @@ type Request = {
   reviewed_by: string; reviewed_at: string; notes: string;
 }
 
-const ROLES = ['viewer','sales','installer','manager','admin']
-const ROLE_COLORS: Record<string, string> = { admin:'bg-red-100 text-red-700', manager:'bg-blue-100 text-blue-700', sales:'bg-green-100 text-green-700', installer:'bg-orange-100 text-orange-700', viewer:'bg-gray-100 text-gray-600' }
-const STATUS_COLORS: Record<string, string> = { pending:'bg-amber-100 text-amber-700', approved:'bg-green-100 text-green-700', denied:'bg-red-100 text-red-600' }
-
-function fmtDate(s: string) { if (!s) return '—'; return new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) }
+const ROLES = ['viewer', 'sales', 'installer', 'manager', 'admin']
+const FILTERS: [string, string][] = [['pending', 'Pending'], ['approved', 'Approved'], ['denied', 'Denied'], ['all', 'All']]
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 function AccessRequestsPage() {
   const [requests, setRequests] = useState<Request[]>([])
@@ -25,7 +26,8 @@ function AccessRequestsPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    fetch(`/api/access-requests?status=${filter}`).then(r=>r.json()).then(d=>{setRequests(d);setLoading(false)}).catch(()=>setLoading(false))
+    const q = filter === 'all' ? '' : `?status=${filter}`
+    fetch(`/api/access-requests${q}`).then(r => r.json()).then(d => { setRequests(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   }, [filter])
 
   useEffect(() => { load() }, [load])
@@ -38,7 +40,7 @@ function AccessRequestsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'approve', role }),
     })
-    if (!res.ok) alert('Failed to approve. Are you logged in as admin?')
+    if (!res.ok) alert('Could not approve the request. Check that you are signed in as an administrator.')
     setApproving(null); load()
   }
 
@@ -48,102 +50,82 @@ function AccessRequestsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deny', notes: denyNotes }),
     })
-    if (!res.ok) alert('Failed to deny. Are you logged in as admin?')
+    if (!res.ok) alert('Could not deny the request. Check that you are signed in as an administrator.')
     setDenyModal(null); setDenyNotes(''); load()
   }
 
-  const pending = requests.filter(r => r.status === 'pending').length
-
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Access Requests</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Review and approve user access requests</p>
-        </div>
-        {pending > 0 && filter !== 'pending' && (
-          <button onClick={() => setFilter('pending')} className="btn-primary text-xs px-3 py-1.5">
-            {pending} pending
-          </button>
+    <div className="animate-fade-in">
+      <PageHeader title="Access requests" description="People asking to join the workspace. Approving creates their account." />
+
+      <div className="segmented mb-4">
+        {FILTERS.map(([v, l]) => <button key={v} data-active={filter === v} onClick={() => setFilter(v)}>{l}</button>)}
+      </div>
+
+      <div className="card max-w-4xl">
+        {loading ? <LoadingRows rows={3} cols={3} /> : requests.length === 0 ? (
+          <EmptyState icon={Inbox} title={filter === 'pending' ? 'No requests waiting' : `No ${filter === 'all' ? '' : filter + ' '}requests`}
+            description={filter === 'pending' ? 'New requests from the sign-in page appear here.' : undefined} />
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {requests.map(req => (
+              <li key={req.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
+                <Avatar name={req.name} size={36} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[14px] font-semibold text-gray-900">{req.name}</p>
+                    <StatusBadge status={req.status} />
+                  </div>
+                  <p className="mt-0.5 text-[13px] text-gray-600">{[req.email, req.phone, req.city].filter(Boolean).join(' · ')}</p>
+                  {req.reason && <p className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-[13px] text-gray-700">{req.reason}</p>}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Asked for <span className="font-medium text-gray-700">{cap(req.requested_role)}</span> access · {fmtDate(req.created_at)}
+                    {req.reviewed_by && <> · Reviewed by {req.reviewed_by}{req.reviewed_at ? ` on ${fmtDate(req.reviewed_at)}` : ''}</>}
+                  </p>
+                  {req.notes && req.status === 'denied' && <p className="mt-1 text-xs text-gray-500">Reason: {req.notes}</p>}
+                </div>
+
+                {req.status === 'pending' && (
+                  <div className="flex w-full flex-col gap-2 sm:w-48 shrink-0">
+                    <label className="block">
+                      <span className="label">Grant access as</span>
+                      <select
+                        value={roleOverride[req.id] ?? req.requested_role}
+                        onChange={e => setRoleOverride(prev => ({ ...prev, [req.id]: e.target.value }))}
+                        className="select h-8 text-xs">
+                        {ROLES.map(r => <option key={r} value={r}>{cap(r)}</option>)}
+                      </select>
+                    </label>
+                    <button onClick={() => approve(req)} disabled={approving === req.id} className="btn-primary btn-sm w-full">
+                      <Check size={14} /> {approving === req.id ? 'Approving…' : 'Approve'}
+                    </button>
+                    <button onClick={() => { setDenyModal(req); setDenyNotes('') }} className="btn-secondary btn-sm w-full">
+                      <X size={14} /> Deny
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      <div className="flex gap-2">
-        {['pending','approved','denied','all'].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors capitalize ${filter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {loading ? (
-          <div className="card text-center py-8 text-gray-400 animate-pulse">Loading…</div>
-        ) : requests.length === 0 ? (
-          <div className="card text-center py-12">
-            <p className="text-3xl mb-2">📭</p>
-            <p className="font-medium text-gray-500">No {filter !== 'all' ? filter : ''} requests</p>
-          </div>
-        ) : requests.map(req => (
-          <div key={req.id} className={`bg-white rounded-xl border p-4 ${req.status === 'pending' ? 'border-amber-200' : 'border-gray-200'}`}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="font-semibold text-gray-900">{req.name}</p>
-                  <span className={`badge ${STATUS_COLORS[req.status] ?? 'bg-gray-100 text-gray-600'}`}>{req.status}</span>
-                  <span className={`badge ${ROLE_COLORS[req.requested_role] ?? 'bg-gray-100 text-gray-600'}`}>Wants: {req.requested_role}</span>
-                </div>
-                <p className="text-xs text-gray-600">{req.email}{req.phone ? ` · ${req.phone}` : ''}{req.city ? ` · ${req.city}` : ''}</p>
-                {req.reason && <p className="text-xs text-gray-500 mt-1.5 italic">&ldquo;{req.reason}&rdquo;</p>}
-                <p className="text-[11px] text-gray-400 mt-1">Submitted {fmtDate(req.created_at)}</p>
-                {req.reviewed_by && <p className="text-[11px] text-gray-400">Reviewed by {req.reviewed_by} · {fmtDate(req.reviewed_at)}</p>}
-              </div>
-
-              {req.status === 'pending' && (
-                <div className="flex flex-col gap-2 min-w-[160px]">
-                  <div>
-                    <label className="text-[10px] text-gray-400 uppercase font-semibold">Grant role</label>
-                    <select
-                      value={roleOverride[req.id] ?? req.requested_role}
-                      onChange={e => setRoleOverride(prev => ({ ...prev, [req.id]: e.target.value }))}
-                      className="input w-full mt-0.5 text-xs">
-                      {ROLES.map(r => <option key={r} value={r} className="capitalize">{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
-                    </select>
-                  </div>
-                  <button onClick={() => approve(req)} disabled={approving === req.id}
-                    className="btn-primary text-xs py-1.5 disabled:opacity-50 w-full">
-                    {approving === req.id ? 'Approving…' : '✓ Approve'}
-                  </button>
-                  <button onClick={() => { setDenyModal(req); setDenyNotes('') }}
-                    className="text-xs py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors w-full">
-                    ✕ Deny
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
       {denyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) setDenyModal(null) }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h2 className="font-bold text-gray-900 mb-1">Deny Request</h2>
-            <p className="text-xs text-gray-500 mb-4">Denying access for <strong>{denyModal.name}</strong> ({denyModal.email})</p>
-            <label className="label">Reason (optional)</label>
-            <textarea value={denyNotes} onChange={e=>setDenyNotes(e.target.value)} className="input w-full h-20 resize-none mb-4" placeholder="e.g. Not a Pongs team member" />
-            <div className="flex gap-2">
-              <button onClick={() => setDenyModal(null)} className="btn-secondary flex-1 text-sm py-2">Cancel</button>
-              <button onClick={() => deny(denyModal)} className="flex-1 bg-red-600 text-white text-sm py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">Deny</button>
-            </div>
-          </div>
-        </div>
+        <Modal title="Deny access request" onClose={() => setDenyModal(null)} width="max-w-sm"
+          footer={<>
+            <button onClick={() => setDenyModal(null)} className="btn-secondary">Cancel</button>
+            <button onClick={() => deny(denyModal)} className="btn bg-red-600 text-white hover:bg-red-700">Deny request</button>
+          </>}>
+          <p className="mb-4 text-[13px] text-gray-600"><span className="font-medium text-gray-900">{denyModal.name}</span> ({denyModal.email}) will not be given an account.</p>
+          <Field label="Reason" hint="Optional. Kept with the request for your records.">
+            <textarea value={denyNotes} onChange={e => setDenyNotes(e.target.value)} className="input resize-none" rows={3} />
+          </Field>
+        </Modal>
       )}
     </div>
   )
 }
 
-export default function AccessRequestsPagePage_Guarded() {
+export default function AccessRequestsPageGuarded() {
   return <Gate admin><AccessRequestsPage /></Gate>
 }

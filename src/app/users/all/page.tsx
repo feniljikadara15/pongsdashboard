@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { Plus, Pencil, Trash2, Users, ShieldCheck } from 'lucide-react'
 import Gate from '@/components/Gate'
+import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Avatar, Modal, Field } from '@/components/ui'
 import {
   MODULES, MODULE_LABELS, ACTIONS, emptyPermissions,
   parsePermissions, type UserPermissions, type ModuleName, type ActionName,
@@ -9,7 +11,7 @@ import {
 interface User {
   id: string; name: string; email: string; phone: string; city: string
   access_level: string; role: string; status: string; created_at: string; notes: string
-  bases: string; permissions_json?: string
+  bases: string; permissions_json?: string; has_password?: boolean
 }
 
 const STATUSES = ['active', 'inactive']
@@ -28,16 +30,7 @@ const emptyForm = (): FormState => ({
   isAdmin: false, permissions: emptyPermissions(),
 })
 
-const roleBadge: Record<string, string> = {
-  admin: 'bg-red-50 text-red-700',
-  manager: 'bg-blue-50 text-blue-700',
-  editor: 'bg-emerald-50 text-emerald-700',
-  viewer: 'bg-gray-100 text-gray-600',
-}
-const statusBadge: Record<string, string> = {
-  active: 'bg-emerald-50 text-emerald-700',
-  inactive: 'bg-gray-100 text-gray-500',
-}
+const ACTION_LABEL: Record<ActionName, string> = { view: 'View', create: 'Create', edit: 'Edit', delete: 'Delete' }
 
 function AllUsersInner() {
   const [users, setUsers] = useState<User[]>([])
@@ -49,6 +42,8 @@ function AllUsersInner() {
   const [roleFilter, setRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [pendingEdit, setPendingEdit] = useState<string | null>(null)
 
   function load() {
     let url = '/api/users'
@@ -60,9 +55,22 @@ function AllUsersInner() {
   }
   useEffect(() => { load() }, [roleFilter, statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // /users/all?edit=<id> opens that user's editor (linked from the user page).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('edit')
+    if (id) setPendingEdit(id)
+  }, [])
+  useEffect(() => {
+    if (!pendingEdit || loading) return
+    const u = users.find(x => x.id === pendingEdit)
+    if (u) openEdit(u)
+    setPendingEdit(null)
+  }, [pendingEdit, loading, users]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setSaving(true)
     // The role/permissions the server persists are derived from these fields.
     const payload = {
       name: form.name, email: form.email, phone: form.phone, city: form.city,
@@ -76,16 +84,17 @@ function AllUsersInner() {
     const res = editId
       ? await fetch(`/api/users/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       : await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    setSaving(false)
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
-      setError(d.error ?? 'Failed to save user'); return
+      setError(d.error ?? 'Could not save the user.'); return
     }
     setShowForm(false); setForm(emptyForm()); setEditId(null); load()
   }
-  async function handleDelete(id: string) {
-    if (!confirm('Delete user?')) return
-    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
-    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Failed to delete'); return }
+  async function handleDelete(u: User) {
+    if (!confirm(`Delete ${u.name}? They will no longer be able to sign in.`)) return
+    const res = await fetch(`/api/users/${u.id}`, { method: 'DELETE' })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Could not delete the user.'); return }
     load()
   }
   function openEdit(u: User) {
@@ -114,181 +123,158 @@ function AllUsersInner() {
     setForm(f => ({ ...f, permissions: { ...f.permissions, [module]: { view: on, create: on, edit: on, delete: on } } }))
   }
 
-  const filtered = users.filter(u => !search || u.name.toLowerCase().includes(search.toLowerCase()) || (u.email ?? '').toLowerCase().includes(search.toLowerCase()) || (u.city ?? '').toLowerCase().includes(search.toLowerCase()))
+  const q = search.toLowerCase()
+  const filtered = users.filter(u => !q || u.name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q) || (u.city ?? '').toLowerCase().includes(q))
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">All Users</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{users.length} users · access is per-user</p>
-        </div>
-        <button onClick={() => { setShowForm(true); setForm(emptyForm()); setEditId(null); setError('') }} className="btn-primary text-xs px-4 py-2">+ Add User</button>
-      </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title="All users"
+        description="Everyone who can sign in. Access is set per user."
+        actions={<button onClick={() => { setShowForm(true); setForm(emptyForm()); setEditId(null); setError('') }} className="btn-primary"><Plus size={15} strokeWidth={2.25} /> Add user</button>}
+      />
 
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-2">
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search users..." className="flex-1 min-w-[160px] max-w-xs border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400">
-            <option value="">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="viewer">Standard user</option>
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400">
-            <option value="">All Statuses</option>
-            {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-          </select>
+      <div className="table-wrap">
+        <div className="flex flex-col gap-3 border-b border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="segmented">
+              {[['', 'Everyone'], ['admin', 'Admins'], ['viewer', 'Standard']].map(([v, l]) => (
+                <button key={v} data-active={roleFilter === v} onClick={() => setRoleFilter(v)}>{l}</button>
+              ))}
+            </div>
+            <div className="segmented">
+              {[['', 'Any status'], ['active', 'Active'], ['inactive', 'Inactive']].map(([v, l]) => (
+                <button key={v} data-active={statusFilter === v} onClick={() => setStatusFilter(v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, city" />
         </div>
-        {loading ? (
-          <p className="text-sm text-gray-400 text-center py-12">Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-12">No users found</p>
+        {loading ? <LoadingRows rows={5} cols={5} /> : filtered.length === 0 ? (
+          <EmptyState icon={Users} title={users.length ? 'No users match' : 'No users yet'} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-gray-400 border-b border-gray-100">
-                <th className="text-left px-4 py-2.5 font-medium">Name</th>
-                <th className="text-left px-4 py-2.5 font-medium">Email</th>
-                <th className="text-left px-4 py-2.5 font-medium">Phone</th>
-                <th className="text-left px-4 py-2.5 font-medium">Access</th>
-                <th className="text-left px-4 py-2.5 font-medium">City</th>
-                <th className="text-left px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(u => {
-                const access = (u.role ?? u.access_level) === 'admin' ? 'admin' : 'user'
-                return (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-blue-700">{u.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <a href={`/users/${u.id}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline">{u.name}</a>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{u.email ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.phone ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${roleBadge[access] ?? 'bg-gray-100 text-gray-600'}`}>{access === 'admin' ? 'Admin' : 'Standard'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{u.city ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${statusBadge[u.status] ?? 'bg-gray-100 text-gray-500'}`}>{u.status}</span>
-                  </td>
-                  <td className="px-4 py-3 flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(u)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                    <button onClick={() => handleDelete(u.id)} className="text-xs text-rose-500 hover:underline">Delete</button>
-                  </td>
-                </tr>
-              )})}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table table-hover">
+              <thead>
+                <tr><th>User</th><th className="hidden md:table-cell">Phone</th><th className="hidden lg:table-cell">City</th><th>Access</th><th className="hidden xl:table-cell">Modules</th><th>Status</th><th className="w-20"><span className="sr-only">Actions</span></th></tr>
+              </thead>
+              <tbody>
+                {filtered.map(u => {
+                  const admin = (u.role ?? u.access_level) === 'admin'
+                  const perms = parsePermissions(u.permissions_json)
+                  const mods = MODULES.filter(m => perms[m]?.view)
+                  return (
+                    <tr key={u.id} className="cursor-pointer" onClick={e => {
+                      if ((e.target as HTMLElement).closest('button,a')) return
+                      window.location.href = `/users/${u.id}`
+                    }}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <Avatar name={u.name} size={30} />
+                          <div className="min-w-0">
+                            <a href={`/users/${u.id}`} className="block truncate font-medium text-gray-900 hover:underline">{u.name}</a>
+                            <div className="truncate text-xs text-gray-500">{u.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden md:table-cell">{u.phone || '—'}</td>
+                      <td className="hidden lg:table-cell">{u.city || '—'}</td>
+                      <td>{admin ? <Badge tone="accent"><ShieldCheck size={12} /> Admin</Badge> : <Badge>Standard</Badge>}</td>
+                      <td className="hidden xl:table-cell text-xs text-gray-600 max-w-[240px] truncate">
+                        {admin ? 'All modules' : mods.length ? mods.map(m => MODULE_LABELS[m]).join(', ') : <span className="text-gray-400">No modules</span>}
+                      </td>
+                      <td>
+                        <Badge tone={u.status === 'active' ? 'success' : 'neutral'} dot>{u.status === 'active' ? 'Active' : 'Inactive'}</Badge>
+                        {!u.has_password && u.status === 'active' && <div className="mt-0.5 text-2xs text-gray-500">No password yet</div>}
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        <button onClick={() => openEdit(u)} className="btn-ghost btn-icon" aria-label={`Edit ${u.name}`}><Pencil size={14} /></button>
+                        <button onClick={() => handleDelete(u)} className="btn-ghost btn-icon text-gray-400 hover:text-red-700 hover:bg-red-50" aria-label={`Delete ${u.name}`}><Trash2 size={14} /></button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 my-8">
-            <h2 className="text-base font-bold text-gray-900 mb-4">{editId ? 'Edit' : 'Add'} User</h2>
-            {error && <div className="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                  <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-                  <input type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400">
-                    {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    {editId ? 'Reset password' : 'Password'}
-                    <span className="text-gray-400 font-normal"> {editId ? '(leave blank to keep current)' : '(optional — user sets one on first login if blank)'}</span>
-                  </label>
-                  <input type="password" value={form.password} autoComplete="new-password"
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder={editId ? 'New password' : 'At least 8 characters'}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                </div>
-              </div>
+        <Modal title={editId ? `Edit ${form.name || 'user'}` : 'Add user'} onClose={() => { setShowForm(false); setEditId(null) }} width="max-w-2xl"
+          footer={<>
+            <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary">Cancel</button>
+            <button type="submit" form="user-form" className="btn-primary" disabled={saving || !form.name || !form.email}>{saving ? 'Saving…' : editId ? 'Save changes' : 'Add user'}</button>
+          </>}>
+          <form id="user-form" onSubmit={handleSubmit} className="space-y-6">
+            {error && <div className="alert-error">{error}</div>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Full name" required className="sm:col-span-2"><input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="input" autoFocus /></Field>
+              <Field label="Email" required><input type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="input" /></Field>
+              <Field label="Phone"><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="input" /></Field>
+              <Field label="City"><input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="input" /></Field>
+              <Field label="Status">
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
+                  {STATUSES.map(s => <option key={s} value={s}>{s === 'active' ? 'Active' : 'Inactive'}</option>)}
+                </select>
+              </Field>
+              <Field label={editId ? 'Reset password' : 'Password'} className="sm:col-span-2"
+                hint={editId ? 'Leave blank to keep the current password.' : 'Optional. If left blank the user sets one at first sign-in.'}>
+                <input type="password" value={form.password} autoComplete="new-password"
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="input" placeholder="At least 8 characters" />
+              </Field>
+            </div>
 
-              {/* Full admin toggle */}
-              <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer">
-                <input type="checkbox" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Full administrator access</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Grants every module, user management, Masters and all admin-only boards. Leave off to grant specific permissions below.</p>
-                </div>
+            <div className="space-y-3">
+              <h3 className="section-title">Access</h3>
+              <label className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${form.isAdmin ? 'border-violet-300 bg-violet-50/60' : 'border-gray-200 hover:border-gray-300'}`}>
+                <input type="checkbox" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="checkbox mt-0.5" />
+                <span>
+                  <span className="block text-[13px] font-medium text-gray-900">Full administrator</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">Every module, user management, access requests and imports. Leave off to grant specific modules below.</span>
+                </span>
               </label>
 
-              {/* Granular per-user permission matrix */}
               {!form.isAdmin && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-700">Module permissions</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Pick exactly what this user can do. View is required for create/edit/delete.</p>
-                  </div>
-                  <table className="w-full text-xs">
+                <div className="rounded-md border border-gray-200 overflow-hidden">
+                  <table className="w-full text-[13px]">
                     <thead>
-                      <tr className="text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                        <th className="text-left px-3 py-2 font-medium">Module</th>
-                        {ACTIONS.map(a => <th key={a} className="px-2 py-2 font-medium text-center">{a}</th>)}
-                        <th className="px-2 py-2 font-medium text-center">All</th>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500">
+                        <th className="text-left font-medium px-3 h-9">Module</th>
+                        {ACTIONS.map(a => <th key={a} className="font-medium px-2 h-9 text-center w-16">{ACTION_LABEL[a]}</th>)}
+                        <th className="font-medium px-2 h-9 text-center w-16">All</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-100">
                       {MODULES.map(m => {
                         const mod = form.permissions[m]
                         const allOn = mod.view && mod.create && mod.edit && mod.delete
                         return (
-                          <tr key={m}>
-                            <td className="px-3 py-2 font-medium text-gray-700">{MODULE_LABELS[m]}</td>
+                          <tr key={m} className="hover:bg-gray-50/60">
+                            <td className="px-3 py-2 font-medium text-gray-800">{MODULE_LABELS[m]}</td>
                             {ACTIONS.map(a => (
                               <td key={a} className="px-2 py-2 text-center">
-                                <input type="checkbox" checked={mod[a]} onChange={() => togglePerm(m, a)} />
+                                <input type="checkbox" className="checkbox" checked={mod[a]} onChange={() => togglePerm(m, a)} aria-label={`${MODULE_LABELS[m]} ${ACTION_LABEL[a]}`} />
                               </td>
                             ))}
                             <td className="px-2 py-2 text-center">
-                              <input type="checkbox" checked={allOn} onChange={e => toggleModuleAll(m, e.target.checked)} />
+                              <input type="checkbox" className="checkbox" checked={allOn} onChange={e => toggleModuleAll(m, e.target.checked)} aria-label={`All ${MODULE_LABELS[m]} permissions`} />
                             </td>
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
+                  <p className="border-t border-gray-100 bg-gray-50/60 px-3 py-2 text-xs text-gray-500">View is required before create, edit or delete. Standard users only ever see their own quotes.</p>
                 </div>
               )}
+            </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 resize-none" />
-              </div>
-
-              <div className="flex gap-2 justify-end pt-1">
-                <button type="button" onClick={() => { setShowForm(false); setEditId(null) }} className="btn-secondary text-xs px-4 py-2">Cancel</button>
-                <button type="submit" className="btn-primary text-xs px-4 py-2">{editId ? 'Save' : 'Add'} User</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <Field label="Notes">
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="input resize-none" />
+            </Field>
+          </form>
+        </Modal>
       )}
     </div>
   )
@@ -297,3 +283,4 @@ function AllUsersInner() {
 export default function AllUsersPage() {
   return <Gate admin><AllUsersInner /></Gate>
 }
+

@@ -129,3 +129,10 @@ export function ownerFilterFor(user: SessionUser | null): string | null {
   if (!user) return '__no_access__' // unauthenticated → matches nothing
   return user.isAdmin ? null : user.email
 }
+
+// Shape a user row for API responses: password hashes never leave the server.
+export function publicUser<T extends Record<string, unknown> | null | undefined>(row: T) {
+  if (!row) return row
+  const { password_hash, ...rest } = row as Record<string, unknown>
+  return { ...rest, has_password: !!password_hash }
+}

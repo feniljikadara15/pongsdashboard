@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbClient, dbUpdateUser, dbDeleteUser, dbLogActivity } from '@/lib/db'
-import { requireAdmin } from '@/lib/session'
+import { requireAdmin, publicUser } from '@/lib/session'
 import { MIN_PASSWORD_LENGTH } from '@/lib/password'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const db = getDbClient()
   const result = await db.execute('SELECT * FROM app_users WHERE id = ?', [params.id])
   if (!result.rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(result.rows[0])
+  return NextResponse.json(publicUser(result.rows[0] as Record<string, unknown>))
 }
 
 // Editing a user — including changing their role/permissions — is admin-only.
@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
   const updated = await dbUpdateUser(params.id, body)
   await dbLogActivity(auth.user.userId, 'user.update', `Updated user ${params.id}`)
-  return NextResponse.json(updated)
+  return NextResponse.json(publicUser(updated as Record<string, unknown>))
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {

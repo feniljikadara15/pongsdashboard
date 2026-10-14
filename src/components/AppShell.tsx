@@ -61,7 +61,7 @@ const ADMIN: NavItem[] = [
     children: [
       { href: '/users', label: 'Overview' },
       { href: '/users/all', label: 'All users' },
-      { href: '/users/permissions', label: 'Permissions' },
+      { href: '/users/permissions', label: 'Access overview' },
       { href: '/users/activity', label: 'Activity log' },
     ],
   },
@@ -94,7 +94,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   completed: 'Completed', inventory: 'Inventory', products: 'Products', 'fabric-rolls': 'Fabric rolls',
   suppliers: 'Suppliers', purchases: 'Purchases', movements: 'Stock movements', reorder: 'Reorder alerts',
   'work-completion': 'Work completion', activity: 'Activity', clients: 'Clients', finance: 'Finance',
-  analytics: 'Analytics', users: 'Team & access', permissions: 'Permissions', admin: 'Admin',
+  analytics: 'Analytics', users: 'Team & access', permissions: 'Access overview', admin: 'Admin',
   'access-requests': 'Access requests', import: 'Airtable import',
 }
 

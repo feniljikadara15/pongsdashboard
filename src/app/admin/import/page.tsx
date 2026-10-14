@@ -1,6 +1,14 @@
 'use client'
 import Gate from '@/components/Gate'
 import { useState } from 'react'
+import { CheckCircle2, DatabaseZap, Loader2, PlugZap } from 'lucide-react'
+import { PageHeader } from '@/components/ui'
+
+const SOURCES = [
+  { label: 'Inventory products', detail: 'Names, categories, stock levels and prices' },
+  { label: 'Suppliers', detail: 'Company and contact details' },
+  { label: 'Customers', detail: 'Imported into Clients' },
+]
 
 function ImportPage() {
   const [importing, setImporting] = useState(false)
@@ -35,80 +43,76 @@ function ImportPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Import from Airtable</h1>
-        <p className="text-sm text-gray-500 mt-1">Syncs inventory products, suppliers, and customers from your Airtable workspace</p>
+    <div className="animate-fade-in">
+      <PageHeader title="Airtable import" description="Copy records from the Airtable workspace into this system." />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] max-w-5xl">
+        <section className="card">
+          <div className="card-header"><h2 className="card-title">What gets imported</h2></div>
+          <ul className="divide-y divide-gray-100">
+            {SOURCES.map(s => (
+              <li key={s.label} className="flex items-center gap-3 px-5 py-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-500"><DatabaseZap size={15} /></span>
+                <span>
+                  <span className="block text-[13px] font-medium text-gray-900">{s.label}</span>
+                  <span className="block text-xs text-gray-500">{s.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-gray-100 px-5 py-3 text-xs text-gray-500">Records that already exist are skipped, so the import is safe to run again.</p>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 px-5 py-4">
+            <button onClick={testConnection} disabled={testing || importing} className="btn-secondary">
+              {testing ? <><Loader2 size={14} className="animate-spin" /> Testing…</> : <><PlugZap size={14} /> Test connection</>}
+            </button>
+            <button onClick={runImport} disabled={importing || testing} className="btn-primary">
+              {importing ? <><Loader2 size={14} className="animate-spin" /> Importing…</> : 'Run import'}
+            </button>
+          </div>
+
+          {(testResult || result) && (
+            <div className="space-y-3 border-t border-gray-100 px-5 py-4">
+              {testResult && (
+                <div className={testResult.error ? 'alert-error' : 'alert-info'}>
+                  <div className="min-w-0 w-full">
+                    <p className="font-medium">{testResult.error ? 'Connection failed' : 'Connection test result'}</p>
+                    <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{JSON.stringify(testResult, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+              {result && (result.ok ? (
+                <div className="alert-success">
+                  <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Import complete</p>
+                    <ul className="mt-1 space-y-0.5 text-xs">
+                      {result.totals && Object.entries(result.totals).map(([k, v]) => (
+                        <li key={k} className="tabular-nums">{v} {k} in the database, {result.imported?.[k] ?? 0} new</li>
+                      ))}
+                      {!result.totals && result.imported && Object.entries(result.imported).map(([k, v]) => (
+                        <li key={k} className="tabular-nums">{v} new {k}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div className="alert-error"><span className="break-all font-mono text-xs">{String(result.error)}</span></div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <aside className="card self-start p-5 text-[13px] text-gray-600 space-y-3">
+          <p className="font-medium text-gray-900">Before you run it</p>
+          <p>The import reads Airtable with the <span className="mono text-xs">AIRTABLE_TOKEN</span> environment variable. Use Test connection first to confirm it is set.</p>
+          <p>Afterwards, review the results in <a href="/inventory/products" className="font-medium text-gray-900 underline-offset-2 hover:underline">Products</a>, <a href="/inventory/suppliers" className="font-medium text-gray-900 underline-offset-2 hover:underline">Suppliers</a> and <a href="/clients" className="font-medium text-gray-900 underline-offset-2 hover:underline">Clients</a>.</p>
+        </aside>
       </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
-        <div className="space-y-2 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-400 rounded-full inline-block" />
-            76 inventory products (with stock levels, prices)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-400 rounded-full inline-block" />
-            10 suppliers
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-400 rounded-full inline-block" />
-            28 customers / clients
-          </div>
-        </div>
-
-        <p className="text-xs text-gray-400">Already-imported records will be skipped (safe to run multiple times)</p>
-
-        <div className="flex gap-3">
-          <button
-            onClick={testConnection}
-            disabled={testing}
-            className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-60"
-          >
-            {testing ? 'Testing...' : 'Test Connection'}
-          </button>
-          <button
-            onClick={runImport}
-            disabled={importing}
-            className="flex-1 btn-primary py-2.5 disabled:opacity-60"
-          >
-            {importing ? 'Importing from Airtable...' : 'Start Import'}
-          </button>
-        </div>
-
-        {testResult && (
-          <div className={`p-3 rounded-xl text-xs font-mono break-all ${testResult.error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-gray-50 border border-gray-200 text-gray-700'}`}>
-            <div className="font-semibold mb-1 text-sm font-sans">Connection test result:</div>
-            <pre className="whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
-          </div>
-        )}
-
-        {result && (
-          <div className={`p-4 rounded-xl text-sm ${result.ok ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-            {result.ok ? (
-              <div className="space-y-1 text-green-800">
-                <div className="font-semibold">Import complete!</div>
-                {result.totals && Object.entries(result.totals).map(([k, v]) => (
-                  <div key={k}>✓ {v} {k} in database ({result.imported?.[k] ?? 0} new)</div>
-                ))}
-                {!result.totals && result.imported && Object.entries(result.imported).map(([k, v]) => (
-                  <div key={k}>• {v} new {k} imported</div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-red-700 font-mono text-xs break-all">{String(result.error)}</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <p className="text-xs text-gray-400 text-center">
-        After import, view your data in <a href="/inventory" className="text-blue-500 hover:underline">Inventory</a> and <a href="/clients" className="text-blue-500 hover:underline">Clients</a>
-      </p>
     </div>
   )
 }
 
-export default function ImportPagePage_Guarded() {
+export default function ImportPageGuarded() {
   return <Gate admin><ImportPage /></Gate>
 }
