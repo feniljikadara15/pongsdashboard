@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Plus, ArrowLeftRight } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, Badge, Modal, Field } from '@/components/ui'
 import { fmtDate } from '@/lib/format'
+import { Select, DatePicker } from '@/components/controls'
+import { toast } from '@/components/feedback'
 
 interface Movement {
   id: string; product_id: string; product_name: string; movement_type: string
@@ -35,12 +37,14 @@ export default function MovementsPage() {
     setSaving(true)
     const prod = products.find(p => p.id === form.product_id)
     // The movements API records the movement and adjusts the product's stock.
-    await fetch('/api/inventory/movements', {
+    const res = await fetch('/api/inventory/movements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, product_name: prod?.name ?? form.product_name }),
     })
     setSaving(false)
+    if (!res.ok) { toast('Could not record the movement', { tone: 'error' }); return }
+    toast('Movement recorded', { description: `${form.movement_type === 'IN' ? 'Received' : 'Issued'} ${form.quantity} ${prod?.unit ?? ''} of ${prod?.name ?? 'product'}`.replace(/\s+/g, ' ') })
     setShowForm(false); setForm(emptyForm()); load()
   }
 
@@ -61,10 +65,8 @@ export default function MovementsPage() {
 
       <div className="table-wrap">
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3">
-          <select value={filterProduct} onChange={e => setFilterProduct(e.target.value)} className="select h-8 w-60 text-xs" aria-label="Product">
-            <option value="">All products</option>
-            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <Select size="sm" className="w-60" value={filterProduct} onChange={setFilterProduct} ariaLabel="Product"
+            options={[{ value: '', label: 'All products' }, ...products.map(p => ({ value: p.id, label: p.name }))]} />
           <div className="segmented" role="radiogroup" aria-label="Direction">
             {[['', 'All'], ['IN', 'Received'], ['OUT', 'Issued']].map(([v, l]) => (
               <button key={v} data-active={filterType === v} onClick={() => setFilterType(v)}>{l}</button>
@@ -103,10 +105,8 @@ export default function MovementsPage() {
           </>}>
           <form id="mv-form" onSubmit={handleSubmit} className="space-y-4">
             <Field label="Product" required>
-              <select required value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} className="select" autoFocus>
-                <option value="">Select product</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <Select value={form.product_id} onChange={v => setForm(f => ({ ...f, product_id: v }))} ariaLabel="Product" placeholder="Select product"
+                searchable options={products.map(p => ({ value: p.id, label: p.name }))} />
             </Field>
             <div className="segmented w-full" role="radiogroup" aria-label="Direction">
               {[['IN', 'Received into stock'], ['OUT', 'Issued from stock']].map(([v, l]) => (
@@ -118,7 +118,7 @@ export default function MovementsPage() {
                 <input type="number" required min="0" step="any" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) }))} className="input tabular-nums" />
               </Field>
               <Field label="Date" required>
-                <input type="date" required value={form.movement_date} onChange={e => setForm(f => ({ ...f, movement_date: e.target.value }))} className="input" />
+                <DatePicker required clearable={false} value={form.movement_date} onChange={v => setForm(f => ({ ...f, movement_date: v }))} ariaLabel="Movement date" />
               </Field>
             </div>
             <Field label="Reference" hint="Purchase order, project or reason.">

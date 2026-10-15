@@ -6,6 +6,7 @@ import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { EmptyState, LoadingRows, StatusBadge } from '@/components/ui'
 import { fmtDate } from '@/lib/format'
+import { toast } from '@/components/feedback'
 
 export default function RevisionTrail({ quoteId }: { quoteId: string }) {
   const [revs, setRevs] = useState<Quote[]>([])
@@ -29,7 +30,7 @@ export default function RevisionTrail({ quoteId }: { quoteId: string }) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
     })
     setCreating(false)
-    if (!res.ok) { alert('Could not create a revision.'); return }
+    if (!res.ok) { toast('Could not create a revision', { tone: 'error' }); return }
     const created = await res.json()
     window.location.href = `/quotes/${created.id}/edit`
   }

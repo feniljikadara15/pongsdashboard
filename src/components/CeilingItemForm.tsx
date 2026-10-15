@@ -4,6 +4,7 @@ import { Trash2, ChevronDown, AlertTriangle, RotateCcw } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, ManualRates } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
+import { Select } from '@/components/controls'
 import { calculateItem, fmtINR, round2, manualDriverWarning } from '@/lib/calculations'
 import { SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT, LED_WATTS_PER_M } from '@/lib/pricing'
 
@@ -99,14 +100,14 @@ function Hint({ children }: { children: React.ReactNode }) {
   return <p className="hint">{children}</p>
 }
 
-function UnitSelect({ value, onChange, className = 'w-[88px]' }: { value: UnitSystem; onChange: (u: UnitSystem) => void; className?: string }) {
-  return (
-    <select className={`select ${className}`} value={value} onChange={e => onChange(e.target.value as UnitSystem)} aria-label="Unit">
-      <option value="mm">mm</option>
-      <option value="feet">feet</option>
-      <option value="meters">m</option>
-    </select>
-  )
+const UNIT_OPTIONS: { value: UnitSystem; label: string }[] = [
+  { value: 'mm', label: 'mm' },
+  { value: 'feet', label: 'feet' },
+  { value: 'meters', label: 'm' },
+]
+
+function UnitSelect({ value, onChange, className = 'w-[88px]', size }: { value: UnitSystem; onChange: (u: UnitSystem) => void; className?: string; size?: 'sm' | 'md' }) {
+  return <Select value={value} onChange={onChange} options={UNIT_OPTIONS} className={className} size={size} ariaLabel="Unit" minPanelWidth={120} />
 }
 
 function CalcRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -229,12 +230,12 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
             <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-4">
               <div>
                 <label className="label">Shape</label>
-                <select className="select" value={item.shape} onChange={e => setShape(e.target.value as ShapeType)}>
-                  <option value="rectangle">Rectangle or square</option>
-                  <option value="circle">Circle</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="l-shape">L-shape</option>
-                </select>
+                <Select<ShapeType> value={item.shape} onChange={setShape} ariaLabel="Shape" options={[
+                  { value: 'rectangle', label: 'Rectangle or square' },
+                  { value: 'circle', label: 'Circle' },
+                  { value: 'triangle', label: 'Triangle' },
+                  { value: 'l-shape', label: 'L-shape' },
+                ]} />
               </div>
 
               <div>
@@ -289,7 +290,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   <>
                     <div className="flex items-center justify-between">
                       <label className="label">Sections</label>
-                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] h-8 -mt-1.5" />
+                      <UnitSelect value={item.unit} onChange={u => set('unit', u)} className="w-[88px] -mt-1.5" size="sm" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       {[['length1', 'Section A length'], ['width1', 'Section A width'], ['length2', 'Section B length'], ['width2', 'Section B width']].map(([k, label]) => (
@@ -360,18 +361,13 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2">
                 <label className="label">Fabric</label>
-                <select className="select" value={item.fabricType} onChange={e => set('fabricType', e.target.value)}>
-                  {FABRIC_OPTIONS.map(f => <option key={f}>{f}</option>)}
-                </select>
+                <Select value={item.fabricType} onChange={v => set('fabricType', v)} ariaLabel="Fabric"
+                  options={FABRIC_OPTIONS.map(f => ({ value: f, label: f }))} />
               </div>
               <div>
                 <label className="label">Gripper</label>
-                <select className="select" value={item.gripperType}
-                  onChange={e => set('gripperType', e.target.value as GripperType)}>
-                  {GRIPPER_OPTIONS.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
+                <Select<GripperType> value={item.gripperType} onChange={v => set('gripperType', v)} ariaLabel="Gripper"
+                  options={GRIPPER_OPTIONS.map(g => ({ value: g, label: g }))} />
               </div>
             </div>
 

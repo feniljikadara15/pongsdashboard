@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import { AlertTriangle, ArrowRight, Package, ShoppingCart } from 'lucide-react'
+import { AlertTriangle, Package, ShoppingCart } from 'lucide-react'
 import { PageHeader, Stat, StatGrid, EmptyState, PageLoading } from '@/components/ui'
 import { ChartCard, ChartEmpty, ChartTooltip, CHART_PRIMARY, AXIS_TICK, GRID_STROKE, BAR_MAX, BAR_RADIUS, compactINR, fullINR } from '@/components/charts'
 import { fmtINR, fmtMonth } from '@/lib/format'
@@ -98,7 +98,7 @@ export default function InventoryDashboard() {
         <section className="card">
           <div className="card-header">
             <h2 className="card-title">Products by category</h2>
-            <a href="/inventory/products" className="text-xs font-medium text-gray-600 hover:text-gray-900">All products</a>
+            <a href="/inventory/products" className="card-link">All products</a>
           </div>
           {categories.length === 0 ? <EmptyState icon={Package} title="No products yet" compact /> : (
             <ul className="space-y-3 p-5">
@@ -119,9 +119,9 @@ export default function InventoryDashboard() {
       </div>
 
       <section className="table-wrap mt-4">
-        <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+        <div className="card-header">
           <h2 className="card-title">Below minimum stock</h2>
-          <a href="/inventory/reorder" className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900">Reorder list <ArrowRight size={13} /></a>
+          <a href="/inventory/reorder" className="card-link">Reorder list</a>
         </div>
         {low.length === 0 ? (
           <EmptyState icon={Package} title="Every product is above its minimum" compact />

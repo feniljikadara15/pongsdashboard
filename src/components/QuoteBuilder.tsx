@@ -10,6 +10,8 @@ import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
 import { PageHeader, Field, Switch, OptionCards } from '@/components/ui'
+import { DatePicker, Combobox } from '@/components/controls'
+import { toast } from '@/components/feedback'
 
 interface Props {
   initial?: Quote
@@ -75,7 +77,6 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
 
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
   const [clients, setClients] = useState<SavedClient[]>([])
-  const [savedNotice, setSavedNotice] = useState('')
   const [showClientBook, setShowClientBook] = useState(false)
   const [clientQuery, setClientQuery] = useState('')
 
@@ -95,7 +96,7 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
   }
 
   function saveCurrentClient() {
-    if (!meta.clientName.trim()) { alert('Enter a client name first.'); return }
+    if (!meta.clientName.trim()) { toast('Enter a client name first', { tone: 'info' }); return }
     const existing = clients.find(c => c.name.toLowerCase() === meta.clientName.toLowerCase())
     const client: SavedClient = {
       id: existing?.id ?? uuid(),
@@ -110,8 +111,7 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
     }
     saveClient(client)
     setClients(listClients())
-    setSavedNotice(`Saved ${client.name} to the client book.`)
-    setTimeout(() => setSavedNotice(''), 2500)
+    toast(`${client.name} saved to the client book`)
   }
 
   function removeClient(id: string) {
@@ -149,10 +149,10 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
   }
 
   async function saveQuote(redirectTo: 'team' | 'internal' = 'team') {
-    if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
+    if (!meta.clientName.trim()) { toast('Enter a client name', { tone: 'error', description: 'A quote needs a client before it can be saved.' }); return }
     if (isCustom) {
-      if (!customLines.some(l => l.description.trim())) { alert('Please add at least one custom line.'); return }
-    } else if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
+      if (!customLines.some(l => l.description.trim())) { toast('Add at least one line item', { tone: 'error' }); return }
+    } else if (items.length === 0) { toast('Add at least one ceiling item', { tone: 'error' }); return }
 
     const isInternal = redirectTo === 'internal'
     if (isInternal) setSavingInternal(true)
@@ -169,13 +169,13 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) {
         const err = await res.text()
-        alert(`Save failed (${res.status}): ${err}`)
+        toast('The quote could not be saved', { tone: 'error', description: `The server returned ${res.status}${err ? `: ${err.slice(0, 160)}` : ''}` })
         setSaving(false); setSavingInternal(false)
         return
       }
       const savedQ = await res.json()
       if (!savedQ?.id) {
-        alert('Save failed: unexpected server response')
+        toast('The quote could not be saved', { tone: 'error', description: 'The server sent an unexpected response.' })
         setSaving(false); setSavingInternal(false)
         return
       }
@@ -187,7 +187,7 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
         router.push(`/quotes/${savedQ.id}/team`)
       }
     } catch (e) {
-      alert(`Save error: ${e}`)
+      toast('The quote could not be saved', { tone: 'error', description: String(e) })
       setSaving(false); setSavingInternal(false)
     }
   }
@@ -284,8 +284,6 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
             </div>
 
             <div className="p-5 space-y-5">
-              {savedNotice && <div className="alert-success">{savedNotice}</div>}
-
               {/* Company selector (required) — determines quotation branding */}
               <div>
                 <span className="label">Issuing company<span className="text-red-600 ml-0.5">*</span></span>
@@ -320,12 +318,12 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
                     value={meta.location} onChange={e => setMeta(m => ({ ...m, location: e.target.value }))} />
                 </Field>
                 <Field label="Quote date">
-                  <input type="date" className="input tabular-nums"
-                    value={meta.date} onChange={e => setMeta(m => ({ ...m, date: e.target.value }))} />
+                  <DatePicker clearable={false} ariaLabel="Quote date"
+                    value={meta.date} onChange={v => setMeta(m => ({ ...m, date: v }))} />
                 </Field>
                 <Field label="Valid until">
-                  <input type="date" className="input tabular-nums"
-                    value={meta.validUntil} onChange={e => setMeta(m => ({ ...m, validUntil: e.target.value }))} />
+                  <DatePicker ariaLabel="Valid until"
+                    value={meta.validUntil} onChange={v => setMeta(m => ({ ...m, validUntil: v }))} />
                 </Field>
               </div>
             </div>
@@ -433,9 +431,6 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
                 <h2 className="card-title">Line items</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Every value is used exactly as entered. No automatic pricing is applied.</p>
               </div>
-              <datalist id="custom-item-suggestions">
-                {CUSTOM_ITEM_SUGGESTIONS.map(s => <option key={s} value={s} />)}
-              </datalist>
               <div className="table-scroll">
                 <table className="table">
                   <thead>
@@ -454,8 +449,8 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
                       return (
                         <tr key={l.id}>
                           <td className="py-2 min-w-[200px]">
-                            <input list="custom-item-suggestions" className="input" placeholder="Choose or type an item" aria-label="Item"
-                              value={l.description} onChange={e => updateCustomLine(l.id, { description: e.target.value })} />
+                            <Combobox suggestions={CUSTOM_ITEM_SUGGESTIONS} placeholder="Choose or type an item" ariaLabel="Item"
+                              value={l.description} onChange={v => updateCustomLine(l.id, { description: v })} />
                           </td>
                           <td className="py-2">
                             <input type="number" min="0" step="1" className="input text-right tabular-nums" placeholder="1" aria-label="Quantity"
@@ -483,7 +478,7 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center justify-between border-t border-gray-200 px-4 py-2.5">
+              <div className="flex items-center justify-between border-t border-gray-200 px-5 py-2.5">
                 <button type="button" onClick={addCustomLine} className="btn-ghost btn-sm"><Plus size={14} /> Add row</button>
                 <span className="text-[13px] text-gray-500">Lines total <span className="ml-2 font-semibold text-gray-900 tabular-nums">{fmtINR(customTotal)}</span></span>
               </div>
@@ -538,7 +533,7 @@ export default function QuoteBuilder({ initial, mode, title, description }: Prop
         {/* Summary */}
         <aside className="xl:sticky xl:top-20 space-y-3">
           <section className="card">
-            <div className="flex items-center justify-between px-5 h-12 border-b border-gray-100">
+            <div className="card-header">
               <h3 className="card-title">Summary</h3>
               <span className="text-xs text-gray-500">{meta.company} · {TIER_OPTIONS.find(t => t.value === meta.priceTier)?.label}</span>
             </div>

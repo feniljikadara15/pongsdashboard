@@ -4,6 +4,7 @@ import { Plus, HardHat, Pencil, Trash2 } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, StatusBadge, Badge } from '@/components/ui'
 import ProjectFormModal, { EMPTY_PROJECT, PROJECT_STATUSES, PROJECT_STATUS_LABELS, type Project } from '@/components/ProjectFormModal'
 import { fmtINR, fmtDate } from '@/lib/format'
+import { confirmDialog, toast } from '@/components/feedback'
 
 const PRIORITY_TONE: Record<string, 'danger' | 'warning' | 'neutral'> = { urgent: 'danger', high: 'warning', normal: 'neutral', low: 'neutral' }
 
@@ -30,8 +31,10 @@ export default function AllProjects() {
   const counts = Object.fromEntries(PROJECT_STATUSES.map(s => [s, projects.filter(p => p.status === s).length]))
 
   async function del(p: Project) {
-    if (!confirm(`Delete the project "${p.name}"? This cannot be undone.`)) return
-    await fetch(`/api/projects/${p.id}`, { method: 'DELETE' })
+    const ok = await confirmDialog({ title: 'Delete project', body: `"${p.name}" and its payments, expenses and checklist will be permanently removed.`, confirmLabel: 'Delete project', tone: 'danger' })
+    if (!ok) return
+    const res = await fetch(`/api/projects/${p.id}`, { method: 'DELETE' })
+    if (res.ok) toast('Project deleted'); else toast('Could not delete the project', { tone: 'error' })
     load()
   }
 

@@ -51,7 +51,7 @@ export default function ProjectsDashboard() {
 
       <div className="mb-3 flex items-end justify-between">
         <h2 className="section-title">Pipeline</h2>
-        <a href="/projects/all" className="text-xs font-medium text-gray-600 hover:text-gray-900">View as table</a>
+        <a href="/projects/all" className="card-link">View as table</a>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {PIPELINE.map(col => {
@@ -94,9 +94,9 @@ export default function ProjectsDashboard() {
       </div>
 
       <section className="table-wrap mt-6">
-        <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+        <div className="card-header">
           <h2 className="card-title">Scheduled in the next 7 days</h2>
-          <a href="/projects/calendar" className="text-xs font-medium text-gray-600 hover:text-gray-900">Open schedule</a>
+          <a href="/projects/calendar" className="card-link">Open schedule</a>
         </div>
         {upcoming.length === 0 ? (
           <EmptyState icon={CalendarClock} title="No installations this week" compact />

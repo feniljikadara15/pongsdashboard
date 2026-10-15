@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { ArrowUpRight, HardHat } from 'lucide-react'
+import { confirmDialog, toast } from '@/components/feedback'
 
 // Converts a quote into a project. When a project already exists for the quote
 // we link to it instead of offering a second conversion.
@@ -16,7 +17,8 @@ export default function ConvertToProjectButton({ quoteId, projectId }: { quoteId
   }
 
   const convert = async () => {
-    if (!confirm('Create a project from this quote? The quote will be marked as approved.')) return
+    const ok = await confirmDialog({ title: 'Convert to project', body: 'A project is created with this quote\'s client, site and contract value, and the quote is marked as approved.', confirmLabel: 'Create project' })
+    if (!ok) return
     setConverting(true)
     const r = await fetch(`/api/quotes/${quoteId}/to-project`, { method: 'POST' })
     const data = await r.json().catch(() => ({}))
@@ -24,7 +26,7 @@ export default function ConvertToProjectButton({ quoteId, projectId }: { quoteId
     if (data.project_id) {
       window.location.href = `/projects/${data.project_id}`
     } else {
-      alert(data.error ?? 'Could not create the project.')
+      toast('Could not create the project', { tone: 'error', description: data.error })
     }
   }
 

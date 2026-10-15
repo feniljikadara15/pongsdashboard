@@ -98,7 +98,7 @@ export default function CalendarPage() {
             <ul className="divide-y divide-gray-100">
               {selectedProjects.map(p => (
                 <li key={p.id}>
-                  <a href={`/projects/${p.id}`} className="block px-4 py-3 hover:bg-gray-50">
+                  <a href={`/projects/${p.id}`} className="block px-5 py-3 hover:bg-gray-50">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-[13px] font-medium text-gray-900">{p.name}</p>
                       <StatusBadge status={p.status} label={PROJECT_STATUS_LABELS[p.status]} />

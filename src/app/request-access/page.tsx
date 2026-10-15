@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import AuthLayout from '@/components/AuthLayout'
 import { Field } from '@/components/ui'
+import { Select } from '@/components/controls'
 
 const ROLES = ['viewer', 'sales', 'installer', 'manager', 'admin']
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -70,9 +71,8 @@ export default function RequestAccessPage() {
           </Field>
         </div>
         <Field label="Access level" hint={ROLE_DESCRIPTIONS[form.requested_role]}>
-          <select value={form.requested_role} onChange={e => set('requested_role', e.target.value)} className="select h-10">
-            {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-          </select>
+          <Select size="lg" value={form.requested_role} onChange={v => set('requested_role', v)} ariaLabel="Access level"
+            options={ROLES.map(r => ({ value: r, label: r.charAt(0).toUpperCase() + r.slice(1) }))} />
         </Field>
         <Field label="Why do you need access?">
           <textarea value={form.reason} onChange={e => set('reason', e.target.value)} className="input resize-none" rows={3}

@@ -3,6 +3,8 @@ import { Fragment, useEffect, useState } from 'react'
 import { Plus, Trash2, ChevronRight, ShoppingCart } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, StatusBadge, Modal, Field, Stat, StatGrid } from '@/components/ui'
 import { fmtINR, fmtDate } from '@/lib/format'
+import { Select, DatePicker } from '@/components/controls'
+import { toast } from '@/components/feedback'
 
 interface Supplier { id: string; name: string }
 interface Product { id: string; name: string; unit: string; cost_price: number }
@@ -57,12 +59,14 @@ export default function PurchasesPage() {
     e.preventDefault()
     setSaving(true)
     const sup = suppliers.find(s => s.id === form.supplier_id)
-    await fetch('/api/inventory/purchases', {
+    const res = await fetch('/api/inventory/purchases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, supplier_name: sup?.name ?? form.supplier_name }),
     })
     setSaving(false)
+    if (!res.ok) { toast('Could not save the purchase order', { tone: 'error' }); return }
+    toast(`Purchase order ${form.purchase_number} saved`)
     setShowForm(false); setForm(emptyForm()); load()
   }
 
@@ -158,20 +162,18 @@ export default function PurchasesPage() {
                 <input required value={form.purchase_number} onChange={e => setForm(f => ({ ...f, purchase_number: e.target.value }))} className="input mono" placeholder="PO-2043" autoFocus />
               </Field>
               <Field label="Date" required>
-                <input type="date" required value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} className="input" />
+                <DatePicker required clearable={false} value={form.purchase_date} onChange={v => setForm(f => ({ ...f, purchase_date: v }))} ariaLabel="Order date" />
               </Field>
               <Field label="Supplier">
-                <select value={form.supplier_id} onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))} className="select">
-                  <option value="">Select supplier</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <Select value={form.supplier_id} onChange={v => setForm(f => ({ ...f, supplier_id: v }))} ariaLabel="Supplier" placeholder="Select supplier"
+                  clearable options={suppliers.map(s => ({ value: s.id, label: s.name }))} />
               </Field>
               <Field label="Status">
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
-                  <option value="received">Received</option>
-                  <option value="pending">Pending</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} ariaLabel="Status" options={[
+                  { value: 'received', label: 'Received', description: 'Adds the quantities to stock' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]} minPanelWidth={240} />
               </Field>
             </div>
 
@@ -187,10 +189,8 @@ export default function PurchasesPage() {
                     {form.items.map((item, idx) => (
                       <tr key={idx}>
                         <td className="px-3 py-1.5">
-                          <select value={item.product_id} onChange={e => updateItem(idx, 'product_id', e.target.value)} className="select h-8 text-xs" aria-label="Product">
-                            <option value="">Select product</option>
-                            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                          <Select size="sm" value={item.product_id} onChange={v => updateItem(idx, 'product_id', v)} ariaLabel="Product" placeholder="Select product"
+                            minPanelWidth={260} options={products.map(p => ({ value: p.id, label: p.name }))} />
                         </td>
                         <td className="px-2 py-1.5"><input placeholder="Description" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} className="input h-8 text-xs" aria-label="Description" /></td>
                         <td className="px-2 py-1.5"><input type="number" min="0" step="any" value={item.quantity} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))} className="input h-8 text-xs text-right tabular-nums" aria-label="Quantity" /></td>

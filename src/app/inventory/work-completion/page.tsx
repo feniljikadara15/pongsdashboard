@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, ClipboardCheck } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, StatusBadge, Modal, Field, SearchInput } from '@/components/ui'
 import { fmtINR, fmtDate } from '@/lib/format'
+import { Select, DatePicker } from '@/components/controls'
+import { confirmDialog, toast } from '@/components/feedback'
 
 interface WorkCompletion {
   id: string; project_name: string; client_name: string; location: string
@@ -37,8 +39,11 @@ export default function WorkCompletionPage() {
     setShowForm(false); setForm(emptyForm()); setEditId(null); load()
   }
   async function handleDelete(j: WorkCompletion) {
-    if (!confirm(`Delete the job record "${j.project_name}"?`)) return
-    await fetch(`/api/inventory/work-completions/${j.id}`, { method: 'DELETE' }); load()
+    const ok = await confirmDialog({ title: 'Delete job record', body: `The record for "${j.project_name}" will be permanently removed.`, confirmLabel: 'Delete record', tone: 'danger' })
+    if (!ok) return
+    const res = await fetch(`/api/inventory/work-completions/${j.id}`, { method: 'DELETE' })
+    if (res.ok) toast('Job record deleted'); else toast('Could not delete the job record', { tone: 'error' })
+    load()
   }
   function openEdit(j: WorkCompletion) {
     setForm({ project_name: j.project_name, client_name: j.client_name ?? '', location: j.location ?? '', completion_date: j.completion_date ?? '', status: j.status ?? 'completed', amount: j.amount ?? 0, notes: j.notes ?? '' })
@@ -98,12 +103,11 @@ export default function WorkCompletionPage() {
             <Field label="Project" required className="sm:col-span-2"><input required value={form.project_name} onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))} className="input" autoFocus /></Field>
             <Field label="Client"><input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} className="input" /></Field>
             <Field label="Location"><input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} className="input" /></Field>
-            <Field label="Completion date"><input type="date" value={form.completion_date} onChange={e => setForm(f => ({ ...f, completion_date: e.target.value }))} className="input" /></Field>
+            <Field label="Completion date"><DatePicker value={form.completion_date} onChange={v => setForm(f => ({ ...f, completion_date: v }))} ariaLabel="Completion date" /></Field>
             <Field label="Amount (₹)"><input type="number" min="0" step="any" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} className="input tabular-nums" /></Field>
             <Field label="Status" className="sm:col-span-2">
-              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
-                {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} ariaLabel="Status"
+                options={STATUSES.map(([v, l]) => ({ value: v, label: l }))} />
             </Field>
             <Field label="Notes" className="sm:col-span-2"><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="input resize-none" /></Field>
           </form>

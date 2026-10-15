@@ -5,6 +5,8 @@ import { Pencil, Trash2, Plus, Package } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Modal, Field } from '@/components/ui'
 import { PRODUCT_CATEGORIES, stockState, STOCK_LABEL, STOCK_TONE } from '@/lib/inventory'
 import { fmtINR } from '@/lib/format'
+import { Select } from '@/components/controls'
+import { confirmDialog, toast } from '@/components/feedback'
 
 interface Product {
   id: string; name: string; category: string; sku: string; unit: string
@@ -43,8 +45,10 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(p: Product) {
-    if (!confirm(`Delete "${p.name}"? Its movement history stays in the log.`)) return
-    await fetch(`/api/inventory/products/${p.id}`, { method: 'DELETE' })
+    const ok = await confirmDialog({ title: 'Delete product', body: `"${p.name}" will be removed from the catalogue. Its movement history stays in the log.`, confirmLabel: 'Delete product', tone: 'danger' })
+    if (!ok) return
+    const res = await fetch(`/api/inventory/products/${p.id}`, { method: 'DELETE' })
+    if (res.ok) toast('Product deleted'); else toast('Could not delete the product', { tone: 'error' })
     load()
   }
 
@@ -81,10 +85,8 @@ export default function ProductsPage() {
       <div className="table-wrap">
         <div className="flex flex-col gap-3 border-b border-gray-200 p-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <select className="select h-8 w-52 text-xs" value={catFilter} onChange={e => setCatFilter(e.target.value)} aria-label="Category">
-              <option value="">All categories</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Select size="sm" className="w-52" value={catFilter} onChange={setCatFilter} ariaLabel="Category"
+              options={[{ value: '', label: 'All categories' }, ...categories.map(c => ({ value: c, label: c }))]} />
             <div className="segmented">
               <button data-active={stockFilter === 'all'} onClick={() => setStockFilter('all')}>All stock</button>
               <button data-active={stockFilter === 'attention'} onClick={() => setStockFilter('attention')}>Needs attention <span className="tabular-nums text-gray-400">{attentionCount}</span></button>
@@ -159,10 +161,8 @@ export default function ProductsPage() {
           <form id="product-form" onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Name" required className="sm:col-span-2"><input className="input" required value={form.name} onChange={f('name')} autoFocus /></Field>
             <Field label="Category">
-              <select className="select" value={form.category} onChange={f('category')}>
-                <option value="">Uncategorised</option>
-                {Array.from(new Set([...PRODUCT_CATEGORIES, form.category].filter(Boolean))).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select value={form.category} onChange={v => setForm(p => ({ ...p, category: v }))} ariaLabel="Category"
+                options={[{ value: '', label: 'Uncategorised' }, ...Array.from(new Set([...PRODUCT_CATEGORIES, form.category].filter(Boolean))).map(c => ({ value: c, label: c }))]} />
             </Field>
             <Field label="SKU"><input className="input mono" value={form.sku} onChange={f('sku')} /></Field>
             <Field label="Unit" hint="For example nos, sqm, mtr, rmt."><input className="input" value={form.unit} onChange={f('unit')} /></Field>

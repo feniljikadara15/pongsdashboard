@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Truck } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Modal, Field, Avatar } from '@/components/ui'
+import { confirmDialog, toast } from '@/components/feedback'
 
 interface Supplier {
   id: string; name: string; contact_name: string; email: string; phone: string; city: string; address: string; notes: string
@@ -34,8 +35,11 @@ export default function SuppliersPage() {
     setShowForm(false); setForm(empty()); setEditId(null); load()
   }
   async function handleDelete(s: Supplier) {
-    if (!confirm(`Delete the supplier "${s.name}"?`)) return
-    await fetch(`/api/inventory/suppliers/${s.id}`, { method: 'DELETE' }); load()
+    const ok = await confirmDialog({ title: 'Delete supplier', body: `"${s.name}" will be removed. Existing purchase orders keep their supplier name.`, confirmLabel: 'Delete supplier', tone: 'danger' })
+    if (!ok) return
+    const res = await fetch(`/api/inventory/suppliers/${s.id}`, { method: 'DELETE' })
+    if (res.ok) toast('Supplier deleted'); else toast('Could not delete the supplier', { tone: 'error' })
+    load()
   }
   function openEdit(s: Supplier) {
     setForm({ name: s.name, contact_name: s.contact_name ?? '', email: s.email ?? '', phone: s.phone ?? '', city: s.city ?? '', address: s.address ?? '', notes: s.notes ?? '' })

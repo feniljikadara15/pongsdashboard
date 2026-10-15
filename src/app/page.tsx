@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, CalendarClock, FileText, PackageCheck, Plus } from 'lucide-react'
+import { CalendarClock, FileText, PackageCheck, Plus } from 'lucide-react'
 import { useMe, can } from '@/lib/useMe'
 import type { Quote } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
@@ -105,11 +105,9 @@ export default function HomePage() {
       <div className="grid gap-4 lg:grid-cols-3">
         {canQuotes && (
           <section className="table-wrap lg:col-span-2">
-            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+            <div className="card-header">
               <h2 className="card-title">Recent quotations</h2>
-              <a href="/quotes" className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900">
-                View all <ArrowRight size={13} />
-              </a>
+              <a href="/quotes" className="card-link">View all</a>
             </div>
             {!quotes ? <LoadingRows rows={5} cols={4} /> : recent.length === 0 ? (
               <EmptyState icon={FileText} title="No quotations yet" description="Your latest quotations will appear here."
@@ -145,9 +143,9 @@ export default function HomePage() {
         <div className="space-y-4">
           {canProjects && (
             <section className="card">
-              <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+              <div className="card-header">
                 <h2 className="card-title">Upcoming installations</h2>
-                <a href="/projects/calendar" className="text-xs font-medium text-gray-600 hover:text-gray-900">Schedule</a>
+                <a href="/projects/calendar" className="card-link">Schedule</a>
               </div>
               {!projects ? <LoadingRows rows={3} cols={2} /> : upcoming.length === 0 ? (
                 <EmptyState icon={CalendarClock} title="Nothing in the next two weeks" compact />
@@ -157,7 +155,7 @@ export default function HomePage() {
                     const d = toDate(String(x.scheduled_date)) ?? new Date()
                     return (
                       <li key={String(x.id)}>
-                        <a href={`/projects/${x.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                        <a href={`/projects/${x.id}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50">
                           <span className="flex w-10 shrink-0 flex-col items-center rounded-md border border-gray-200 bg-white py-1 leading-none">
                             <span className="text-2xs font-medium uppercase text-gray-500">{monthShort(d)}</span>
                             <span className="mt-0.5 text-[15px] font-semibold tabular-nums text-gray-900">{d.getDate()}</span>
@@ -179,9 +177,9 @@ export default function HomePage() {
 
           {canInventory && (
             <section className="card">
-              <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+              <div className="card-header">
                 <h2 className="card-title">Stock alerts</h2>
-                <a href="/inventory/reorder" className="text-xs font-medium text-gray-600 hover:text-gray-900">Reorder list</a>
+                <a href="/inventory/reorder" className="card-link">Reorder list</a>
               </div>
               {!lowStock ? <LoadingRows rows={3} cols={2} /> : lowStock.length === 0 ? (
                 <EmptyState icon={PackageCheck} title="All products above minimum" compact />
@@ -192,7 +190,7 @@ export default function HomePage() {
                     const min = Number(x.min_stock ?? 0)
                     const pct = min > 0 ? Math.min(100, Math.round((cur / min) * 100)) : 0
                     return (
-                      <li key={String(x.id)} className="px-4 py-2.5">
+                      <li key={String(x.id)} className="px-5 py-2.5">
                         <div className="flex items-center justify-between gap-3">
                           <span className="truncate text-[13px] font-medium text-gray-900">{String(x.name)}</span>
                           <span className="shrink-0 text-xs tabular-nums text-gray-500">{cur} / {min}</span>

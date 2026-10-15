@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Users, ShieldCheck } from 'lucide-react'
 import Gate from '@/components/Gate'
+import { Select } from '@/components/controls'
+import { confirmDialog, toast } from '@/components/feedback'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Avatar, Modal, Field } from '@/components/ui'
 import {
   MODULES, MODULE_LABELS, ACTIONS, emptyPermissions,
@@ -92,9 +94,11 @@ function AllUsersInner() {
     setShowForm(false); setForm(emptyForm()); setEditId(null); load()
   }
   async function handleDelete(u: User) {
-    if (!confirm(`Delete ${u.name}? They will no longer be able to sign in.`)) return
+    const ok = await confirmDialog({ title: 'Delete user', body: `${u.name} will no longer be able to sign in. Their past activity stays in the log.`, confirmLabel: 'Delete user', tone: 'danger' })
+    if (!ok) return
     const res = await fetch(`/api/users/${u.id}`, { method: 'DELETE' })
-    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Could not delete the user.'); return }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); toast('Could not delete the user', { tone: 'error', description: d.error }); return }
+    toast(`${u.name} deleted`)
     load()
   }
   function openEdit(u: User) {
@@ -214,9 +218,8 @@ function AllUsersInner() {
               <Field label="Phone"><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="input" /></Field>
               <Field label="City"><input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className="input" /></Field>
               <Field label="Status">
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="select">
-                  {STATUSES.map(s => <option key={s} value={s}>{s === 'active' ? 'Active' : 'Inactive'}</option>)}
-                </select>
+                <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} ariaLabel="Status"
+                  options={STATUSES.map(s => ({ value: s, label: s === 'active' ? 'Active' : 'Inactive' }))} />
               </Field>
               <Field label={editId ? 'Reset password' : 'Password'} className="sm:col-span-2"
                 hint={editId ? 'Leave blank to keep the current password.' : 'Optional. If left blank the user sets one at first sign-in.'}>

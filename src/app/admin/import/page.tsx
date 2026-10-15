@@ -3,6 +3,7 @@ import Gate from '@/components/Gate'
 import { useEffect, useState } from 'react'
 import { CheckCircle2, DatabaseZap, Loader2, PlugZap, FlaskConical, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui'
+import { confirmDialog, toast } from '@/components/feedback'
 
 const SOURCES = [
   { label: 'Inventory products', detail: 'Names, categories, stock levels and prices' },
@@ -29,13 +30,14 @@ function SampleDataCard() {
   const total = counts ? Object.values(counts).reduce((s, n) => s + n, 0) : 0
 
   async function run(method: 'POST' | 'DELETE') {
-    if (method === 'DELETE' && !confirm('Remove all sample records? Real records are not affected.')) return
+    if (method === 'DELETE' && !(await confirmDialog({ title: 'Remove sample data', body: 'All sample clients, quotes, projects and inventory records will be deleted. Real records are not affected.', confirmLabel: 'Remove sample data', tone: 'danger' }))) return
     setBusy(method === 'POST' ? 'load' : 'remove'); setError('')
     const r = await fetch('/api/admin/sample-data', { method })
     const d = await r.json().catch(() => ({}))
     setBusy(null)
     if (!r.ok) { setError(d.error ?? `The server returned ${r.status}.`); return }
     setCounts(d.counts ?? null)
+    toast(method === 'POST' ? 'Sample data loaded' : 'Sample data removed')
   }
 
   return (

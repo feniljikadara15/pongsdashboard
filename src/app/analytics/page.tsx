@@ -121,7 +121,7 @@ function AnalyticsInner() {
         </section>
 
         <section className="table-wrap">
-          <div className="flex items-center justify-between px-5 h-12 border-b border-gray-200"><h2 className="card-title">Project pipeline</h2><a href="/projects" className="text-xs font-medium text-gray-600 hover:text-gray-900">Projects</a></div>
+          <div className="card-header"><h2 className="card-title">Project pipeline</h2><a href="/projects" className="card-link">Projects</a></div>
           {pipeline.length === 0 ? <EmptyState icon={BarChart3} title="No projects yet" compact /> : (
             <table className="table">
               <thead><tr><th>Stage</th><th className="num">Projects</th><th className="num">Area</th><th className="num">Value</th></tr></thead>
@@ -141,7 +141,7 @@ function AnalyticsInner() {
       </div>
 
       <section className="table-wrap mt-4">
-        <div className="flex items-center justify-between px-5 h-12 border-b border-gray-200"><h2 className="card-title">Top clients by quoted value</h2><a href="/clients" className="text-xs font-medium text-gray-600 hover:text-gray-900">Clients</a></div>
+        <div className="card-header"><h2 className="card-title">Top clients by quoted value</h2><a href="/clients" className="card-link">Clients</a></div>
         {data.topClients.length === 0 ? <EmptyState icon={BarChart3} title="No clients yet" compact /> : (
           <div className="table-scroll">
             <table className="table">

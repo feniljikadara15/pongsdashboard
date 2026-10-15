@@ -4,6 +4,7 @@ import { CheckCircle2 } from 'lucide-react'
 import { PageHeader, Stat, StatGrid, EmptyState, LoadingRows, StatusBadge } from '@/components/ui'
 import { PROJECT_STATUS_LABELS } from '@/components/ProjectFormModal'
 import { fmtINR, fmtDate, fmtMonth } from '@/lib/format'
+import { Select } from '@/components/controls'
 
 type Project = { id: string; name: string; client_name: string; city: string; status: string; completion_date: string; ceiling_area_sqft: number; contract_value: number; team_lead: string }
 
@@ -34,10 +35,8 @@ export default function CompletedProjects() {
         title="Completed projects"
         description="Finished and invoiced installations."
         actions={
-          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="select w-48" aria-label="Completion month">
-            <option value="">All time</option>
-            {months.map(m => <option key={m} value={m}>{fmtMonth(m + '-01')}</option>)}
-          </select>
+          <Select className="w-48" value={filterMonth} onChange={setFilterMonth} ariaLabel="Completion month"
+            options={[{ value: '', label: 'All time' }, ...months.map(m => ({ value: m as string, label: fmtMonth(m + '-01') }))]} />
         }
       />
 

@@ -76,7 +76,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       </section>
 
       <section className="table-wrap">
-        <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+        <div className="card-header">
           <h2 className="card-title">Movement history</h2>
           <span className="text-xs text-gray-500">{withBalance.length} movement{withBalance.length !== 1 ? 's' : ''}</span>
         </div>

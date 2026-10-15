@@ -1,5 +1,6 @@
 import type { ReactNode, InputHTMLAttributes } from 'react'
 import { Search } from 'lucide-react'
+export { Modal } from '@/components/Modal'
 import type { LucideIcon } from 'lucide-react'
 
 // Shared presentation primitives. Every page composes these so headings,
@@ -260,35 +261,6 @@ export function Field({
       {children}
       {hint && <span className="hint block">{hint}</span>}
     </label>
-  )
-}
-
-export function Modal({
-  title,
-  onClose,
-  children,
-  footer,
-  width = 'max-w-lg',
-}: {
-  title: ReactNode
-  onClose: () => void
-  children: ReactNode
-  footer?: ReactNode
-  width?: string
-}) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal ${width} max-h-[90vh] flex flex-col`} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="modal-header shrink-0">
-          <h2 className="modal-title">{title}</h2>
-          <button type="button" onClick={onClose} className="btn-ghost btn-icon -mr-2" aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="modal-body overflow-y-auto">{children}</div>
-        {footer && <div className="modal-footer shrink-0">{footer}</div>}
-      </div>
-    </div>
   )
 }
 

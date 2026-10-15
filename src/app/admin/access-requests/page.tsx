@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { Check, X, Inbox } from 'lucide-react'
 import { PageHeader, Avatar, StatusBadge, EmptyState, LoadingRows, Modal, Field } from '@/components/ui'
 import { fmtDate } from '@/lib/format'
+import { Select } from '@/components/controls'
+import { toast } from '@/components/feedback'
 
 type Request = {
   id: string; name: string; email: string; phone: string; city: string;
@@ -40,7 +42,8 @@ function AccessRequestsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'approve', role }),
     })
-    if (!res.ok) alert('Could not approve the request. Check that you are signed in as an administrator.')
+    if (!res.ok) toast('Could not approve the request', { tone: 'error', description: 'Check that you are signed in as an administrator.' })
+    else toast(`${req.name} now has access`)
     setApproving(null); load()
   }
 
@@ -50,7 +53,8 @@ function AccessRequestsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deny', notes: denyNotes }),
     })
-    if (!res.ok) alert('Could not deny the request. Check that you are signed in as an administrator.')
+    if (!res.ok) toast('Could not deny the request', { tone: 'error', description: 'Check that you are signed in as an administrator.' })
+    else toast('Request denied')
     setDenyModal(null); setDenyNotes(''); load()
   }
 
@@ -87,15 +91,13 @@ function AccessRequestsPage() {
 
                 {req.status === 'pending' && (
                   <div className="flex w-full flex-col gap-2 sm:w-48 shrink-0">
-                    <label className="block">
+                    <div>
                       <span className="label">Grant access as</span>
-                      <select
+                      <Select size="sm" ariaLabel="Grant access as"
                         value={roleOverride[req.id] ?? req.requested_role}
-                        onChange={e => setRoleOverride(prev => ({ ...prev, [req.id]: e.target.value }))}
-                        className="select h-8 text-xs">
-                        {ROLES.map(r => <option key={r} value={r}>{cap(r)}</option>)}
-                      </select>
-                    </label>
+                        onChange={v => setRoleOverride(prev => ({ ...prev, [req.id]: v }))}
+                        options={ROLES.map(r => ({ value: r, label: cap(r) }))} />
+                    </div>
                     <button onClick={() => approve(req)} disabled={approving === req.id} className="btn-primary btn-sm w-full">
                       <Check size={14} /> {approving === req.id ? 'Approving…' : 'Approve'}
                     </button>
@@ -114,7 +116,7 @@ function AccessRequestsPage() {
         <Modal title="Deny access request" onClose={() => setDenyModal(null)} width="max-w-sm"
           footer={<>
             <button onClick={() => setDenyModal(null)} className="btn-secondary">Cancel</button>
-            <button onClick={() => deny(denyModal)} className="btn bg-red-600 text-white hover:bg-red-700">Deny request</button>
+            <button onClick={() => deny(denyModal)} className="btn-destructive">Deny request</button>
           </>}>
           <p className="mb-4 text-[13px] text-gray-600"><span className="font-medium text-gray-900">{denyModal.name}</span> ({denyModal.email}) will not be given an account.</p>
           <Field label="Reason" hint="Optional. Kept with the request for your records.">

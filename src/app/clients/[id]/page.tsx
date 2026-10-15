@@ -85,7 +85,7 @@ export default function ClientDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4 min-w-0">
           <section className="table-wrap">
-            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+            <div className="card-header">
               <h2 className="card-title">Quotes</h2>
               <span className="text-xs text-gray-500">{quotes.length}</span>
             </div>
@@ -112,7 +112,7 @@ export default function ClientDetailPage() {
           </section>
 
           <section className="table-wrap">
-            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+            <div className="card-header">
               <h2 className="card-title">Projects</h2>
               <span className="text-xs text-gray-500">{projects.length}</span>
             </div>

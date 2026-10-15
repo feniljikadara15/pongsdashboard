@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Modal, Field } from '@/components/ui'
+import { Select } from '@/components/controls'
 
 export type ClientForm = {
   name: string; company: string; email: string; phone: string; city: string; address: string
@@ -22,7 +23,7 @@ export default function ClientFormModal({ id, initial, onClose, onSaved }: { id?
   const [form, setForm] = useState<ClientForm>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const set = (k: keyof ClientForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const set = (k: keyof ClientForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
@@ -49,14 +50,12 @@ export default function ClientFormModal({ id, initial, onClose, onSaved }: { id?
         <Field label="GSTIN"><input value={form.gst_number} onChange={set('gst_number')} className="input mono uppercase" /></Field>
         <Field label="Address" className="sm:col-span-2"><input value={form.address} onChange={set('address')} className="input" /></Field>
         <Field label="Source">
-          <select value={form.source} onChange={set('source')} className="select">
-            {Array.from(new Set([...CLIENT_SOURCES, form.source].filter(Boolean))).map(s => <option key={s} value={s}>{SOURCE_LABEL[s] ?? s}</option>)}
-          </select>
+          <Select value={form.source} onChange={v => setForm(f => ({ ...f, source: v }))} ariaLabel="Source"
+            options={Array.from(new Set([...CLIENT_SOURCES, form.source].filter(Boolean))).map(s => ({ value: s, label: SOURCE_LABEL[s] ?? s }))} />
         </Field>
         <Field label="Status">
-          <select value={form.status} onChange={set('status')} className="select">
-            {CLIENT_STATUSES.map(s => <option key={s} value={s}>{CLIENT_STATUS_LABEL[s]}</option>)}
-          </select>
+          <Select value={form.status} onChange={v => setForm(f => ({ ...f, status: v }))} ariaLabel="Status"
+            options={CLIENT_STATUSES.map(s => ({ value: s, label: CLIENT_STATUS_LABEL[s] }))} />
         </Field>
         <Field label="Notes" className="sm:col-span-2"><textarea value={form.notes} onChange={set('notes')} rows={3} className="input resize-none" /></Field>
       </form>

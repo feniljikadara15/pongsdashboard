@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import AppShell from '@/components/AppShell'
+import { FeedbackHost } from '@/components/feedback'
 
 export const metadata: Metadata = {
   title: { default: 'Pongs', template: '%s · Pongs' },
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen">
         <AppShell>{children}</AppShell>
+        <FeedbackHost />
       </body>
     </html>
   )

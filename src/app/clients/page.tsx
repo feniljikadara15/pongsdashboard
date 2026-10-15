@@ -5,6 +5,7 @@ import Gate from '@/components/Gate'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Avatar, Stat, StatGrid } from '@/components/ui'
 import ClientFormModal, { EMPTY_CLIENT, CLIENT_STATUSES, CLIENT_STATUS_LABEL, SOURCE_LABEL, type ClientForm } from '@/components/ClientFormModal'
 import { fmtINR } from '@/lib/format'
+import { confirmDialog, toast } from '@/components/feedback'
 
 interface Client extends ClientForm {
   id: string
@@ -39,10 +40,12 @@ function ClientsPageInner() {
   })
 
   const del = async (c: Client) => {
-    if (!confirm(`Delete ${c.name}? Their quotes and projects are not affected.`)) return
+    const ok = await confirmDialog({ title: 'Delete client', body: `${c.name} will be removed from Clients. Their quotes and projects are not affected.`, confirmLabel: 'Delete client', tone: 'danger' })
+    if (!ok) return
     setDeleting(c.id)
-    await fetch(`/api/clients/${c.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/clients/${c.id}`, { method: 'DELETE' })
     setDeleting(null)
+    if (res.ok) toast('Client deleted'); else toast('Could not delete the client', { tone: 'error' })
     load()
   }
 

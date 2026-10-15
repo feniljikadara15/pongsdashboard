@@ -1,7 +1,7 @@
 'use client'
 import Gate from '@/components/Gate'
 import { useEffect, useState } from 'react'
-import { ArrowRight, DatabaseZap, Inbox, Plus } from 'lucide-react'
+import { DatabaseZap, Inbox, Plus } from 'lucide-react'
 import { PageHeader, Stat, StatGrid, Avatar, Badge, EmptyState, PageLoading } from '@/components/ui'
 import { MODULES, MODULE_LABELS, parsePermissions } from '@/lib/permissions'
 
@@ -56,7 +56,7 @@ function UsersDashboard() {
         <section className="card">
           <div className="card-header">
             <h2 className="card-title">Module access</h2>
-            <a href="/users/permissions" className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900">Access overview <ArrowRight size={13} /></a>
+            <a href="/users/permissions" className="card-link">Access overview</a>
           </div>
           <ul className="space-y-3.5 p-5">
             {moduleReach.map(({ m, n }) => (
@@ -75,7 +75,7 @@ function UsersDashboard() {
           <section className="card">
             <div className="card-header">
               <h2 className="card-title">Access requests</h2>
-              <a href="/admin/access-requests" className="text-xs font-medium text-gray-600 hover:text-gray-900">Review</a>
+              <a href="/admin/access-requests" className="card-link">Review</a>
             </div>
             {requests.length === 0 ? <EmptyState icon={Inbox} title="No pending requests" compact /> : (
               <ul className="divide-y divide-gray-100">

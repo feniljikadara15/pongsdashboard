@@ -5,6 +5,8 @@ import { Pencil, Plus, Trash2, FileText, Receipt, Wallet, MessageSquare, HardHat
 import { StatusBadge, Badge, EmptyState, Modal, Field, PageLoading, Avatar } from '@/components/ui'
 import ProjectFormModal, { PROJECT_STATUS_LABELS, teamMembersText, type Project as FormProject } from '@/components/ProjectFormModal'
 import { fmtINR, fmtDate } from '@/lib/format'
+import { Select, DatePicker } from '@/components/controls'
+import { confirmDialog, toast } from '@/components/feedback'
 
 interface Project extends FormProject { created_at: string }
 interface Payment { id: string; type: string; amount: number; payment_date: string; method: string; reference: string; notes: string }
@@ -93,8 +95,10 @@ export default function ProjectDetailPage() {
   }
 
   const deleteExpense = async (exp: Expense) => {
-    if (!confirm(`Delete the expense "${exp.description}"?`)) return
-    await fetch(`/api/projects/${id}/expenses`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expense_id: exp.id }) })
+    const ok = await confirmDialog({ title: 'Delete expense', body: `"${exp.description}" will be removed from this project's costs.`, confirmLabel: 'Delete expense', tone: 'danger' })
+    if (!ok) return
+    const res = await fetch(`/api/projects/${id}/expenses`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expense_id: exp.id }) })
+    if (res.ok) toast('Expense deleted'); else toast('Could not delete the expense', { tone: 'error' })
     loadPayments()
   }
 
@@ -208,7 +212,7 @@ export default function ProjectDetailPage() {
             <section className="card">
               <div className="card-header">
                 <h2 className="card-title">Checklist</h2>
-                <button className="text-xs font-medium text-gray-600 hover:text-gray-900" onClick={() => setTab('checklist')}>Open</button>
+                <button className="card-link" onClick={() => setTab('checklist')}>Open</button>
               </div>
               <div className="p-5">
                 <div className="flex items-baseline justify-between">
@@ -235,7 +239,7 @@ export default function ProjectDetailPage() {
             <section className="card">
               <div className="card-header">
                 <h2 className="card-title">Latest update</h2>
-                <button className="text-xs font-medium text-gray-600 hover:text-gray-900" onClick={() => setTab('updates')}>All updates</button>
+                <button className="card-link" onClick={() => setTab('updates')}>All updates</button>
               </div>
               {updates[0] ? (
                 <div className="p-5">
@@ -251,7 +255,7 @@ export default function ProjectDetailPage() {
       {tab === 'payments' && (
         <div className="space-y-4">
           <section className="table-wrap">
-            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+            <div className="card-header">
               <h2 className="card-title">Payments received</h2>
               <button onClick={() => setShowPayModal(true)} className="btn-secondary btn-sm"><Plus size={14} /> Record payment</button>
             </div>
@@ -277,7 +281,7 @@ export default function ProjectDetailPage() {
           </section>
 
           <section className="table-wrap">
-            <div className="flex items-center justify-between px-4 h-12 border-b border-gray-200">
+            <div className="card-header">
               <h2 className="card-title">Expenses</h2>
               <button onClick={() => setShowExpModal(true)} className="btn-secondary btn-sm"><Plus size={14} /> Add expense</button>
             </div>
@@ -378,22 +382,21 @@ export default function ProjectDetailPage() {
           </>}>
           <form id="pay-form" onSubmit={addPayment} className="grid grid-cols-2 gap-4">
             <Field label="Type">
-              <select value={payForm.type} onChange={e => setPayForm(f => ({ ...f, type: e.target.value }))} className="select">
-                <option value="payment">Payment</option>
-                <option value="advance">Advance</option>
-                <option value="final">Final payment</option>
-              </select>
+              <Select value={payForm.type} onChange={v => setPayForm(f => ({ ...f, type: v }))} ariaLabel="Payment type" options={[
+                { value: 'payment', label: 'Payment' },
+                { value: 'advance', label: 'Advance' },
+                { value: 'final', label: 'Final payment' },
+              ]} />
             </Field>
             <Field label="Amount (₹)" required>
               <input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className="input tabular-nums" autoFocus />
             </Field>
             <Field label="Date">
-              <input type="date" value={payForm.payment_date} onChange={e => setPayForm(f => ({ ...f, payment_date: e.target.value }))} className="input" />
+              <DatePicker value={payForm.payment_date} onChange={v => setPayForm(f => ({ ...f, payment_date: v }))} clearable={false} ariaLabel="Payment date" />
             </Field>
             <Field label="Method">
-              <select value={payForm.method} onChange={e => setPayForm(f => ({ ...f, method: e.target.value }))} className="select">
-                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m === 'upi' ? 'UPI' : cap(m)}</option>)}
-              </select>
+              <Select value={payForm.method} onChange={v => setPayForm(f => ({ ...f, method: v }))} ariaLabel="Payment method"
+                options={PAYMENT_METHODS.map(m => ({ value: m, label: m === 'upi' ? 'UPI' : cap(m) }))} />
             </Field>
             <Field label="Reference" className="col-span-2">
               <input value={payForm.reference} onChange={e => setPayForm(f => ({ ...f, reference: e.target.value }))} className="input" placeholder="UTR or cheque number" />
@@ -416,15 +419,14 @@ export default function ProjectDetailPage() {
               <input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} className="input" autoFocus />
             </Field>
             <Field label="Category">
-              <select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))} className="select">
-                {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{cap(c)}</option>)}
-              </select>
+              <Select value={expForm.category} onChange={v => setExpForm(f => ({ ...f, category: v }))} ariaLabel="Category"
+                options={EXPENSE_CATEGORIES.map(c => ({ value: c, label: cap(c) }))} />
             </Field>
             <Field label="Amount (₹)" required>
               <input type="number" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} className="input tabular-nums" />
             </Field>
             <Field label="Date">
-              <input type="date" value={expForm.expense_date} onChange={e => setExpForm(f => ({ ...f, expense_date: e.target.value }))} className="input" />
+              <DatePicker value={expForm.expense_date} onChange={v => setExpForm(f => ({ ...f, expense_date: v }))} clearable={false} ariaLabel="Expense date" />
             </Field>
             <Field label="Paid to">
               <input value={expForm.paid_to} onChange={e => setExpForm(f => ({ ...f, paid_to: e.target.value }))} className="input" />

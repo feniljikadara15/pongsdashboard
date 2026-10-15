@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Modal, Field } from '@/components/ui'
+import { Select, DatePicker } from '@/components/controls'
 
 export type Project = {
   id: string; name: string; client_name: string; client_phone: string; client_email: string;
@@ -63,66 +64,70 @@ export default function ProjectFormModal({ initial, onClose, onSaved }: { initia
       }>
       <form id="project-form" onSubmit={save} className="space-y-6">
         {error && <div className="alert-error">{error}</div>}
-        <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <legend className="section-title mb-3">Project</legend>
-          <Field label="Project name" required className="sm:col-span-2">
-            <input value={form.name} onChange={e => set('name', e.target.value)} className="input" placeholder="Corporate office ceiling" autoFocus />
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={e => set('status', e.target.value)} className="select">
-              {PROJECT_STATUSES.map(s => <option key={s} value={s}>{PROJECT_STATUS_LABELS[s]}</option>)}
-            </select>
-          </Field>
-          <Field label="Priority">
-            <select value={form.priority} onChange={e => set('priority', e.target.value)} className="select">
-              {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-            </select>
-          </Field>
-          <Field label="Ceiling area (sqft)">
-            <input type="number" value={form.ceiling_area_sqft} onChange={e => set('ceiling_area_sqft', parseFloat(e.target.value) || 0)} className="input tabular-nums" />
-          </Field>
-          <Field label="Contract value (₹)">
-            <input type="number" value={form.contract_value} onChange={e => set('contract_value', parseFloat(e.target.value) || 0)} className="input tabular-nums" />
-          </Field>
-        </fieldset>
+        <section>
+          <h3 className="section-title mb-3">Project</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Project name" required className="sm:col-span-2">
+              <input value={form.name} onChange={e => set('name', e.target.value)} className="input" placeholder="Corporate office ceiling" autoFocus />
+            </Field>
+            <Field label="Status">
+              <Select value={form.status} onChange={v => set('status', v)} ariaLabel="Status"
+                options={PROJECT_STATUSES.map(s => ({ value: s, label: PROJECT_STATUS_LABELS[s] }))} />
+            </Field>
+            <Field label="Priority">
+              <Select value={form.priority} onChange={v => set('priority', v)} ariaLabel="Priority"
+                options={PRIORITIES.map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) }))} />
+            </Field>
+            <Field label="Ceiling area (sqft)">
+              <input type="number" value={form.ceiling_area_sqft} onChange={e => set('ceiling_area_sqft', parseFloat(e.target.value) || 0)} className="input tabular-nums" />
+            </Field>
+            <Field label="Contract value (₹)">
+              <input type="number" value={form.contract_value} onChange={e => set('contract_value', parseFloat(e.target.value) || 0)} className="input tabular-nums" />
+            </Field>
+          </div>
+        </section>
 
-        <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-5">
-          <legend className="section-title mb-3 float-left w-full">Client and site</legend>
-          <Field label="Client name" required>
-            <input value={form.client_name} onChange={e => set('client_name', e.target.value)} className="input" />
-          </Field>
-          <Field label="Phone">
-            <input value={form.client_phone} onChange={e => set('client_phone', e.target.value)} className="input" type="tel" />
-          </Field>
-          <Field label="Email">
-            <input value={form.client_email} onChange={e => set('client_email', e.target.value)} className="input" type="email" />
-          </Field>
-          <Field label="City">
-            <input value={form.city} onChange={e => set('city', e.target.value)} className="input" />
-          </Field>
-          <Field label="Site address" className="sm:col-span-2">
-            <input value={form.site_address} onChange={e => set('site_address', e.target.value)} className="input" />
-          </Field>
-        </fieldset>
+        <section className="border-t border-gray-100 pt-5">
+          <h3 className="section-title mb-3">Client and site</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Client name" required>
+              <input value={form.client_name} onChange={e => set('client_name', e.target.value)} className="input" />
+            </Field>
+            <Field label="Phone">
+              <input value={form.client_phone} onChange={e => set('client_phone', e.target.value)} className="input" type="tel" />
+            </Field>
+            <Field label="Email">
+              <input value={form.client_email} onChange={e => set('client_email', e.target.value)} className="input" type="email" />
+            </Field>
+            <Field label="City">
+              <input value={form.city} onChange={e => set('city', e.target.value)} className="input" />
+            </Field>
+            <Field label="Site address" className="sm:col-span-2">
+              <input value={form.site_address} onChange={e => set('site_address', e.target.value)} className="input" />
+            </Field>
+          </div>
+        </section>
 
-        <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-5">
-          <legend className="section-title mb-3 float-left w-full">Schedule and team</legend>
-          <Field label="Scheduled date">
-            <input type="date" value={form.scheduled_date ?? ''} onChange={e => set('scheduled_date', e.target.value)} className="input tabular-nums" />
-          </Field>
-          <Field label="Completion date">
-            <input type="date" value={form.completion_date ?? ''} onChange={e => set('completion_date', e.target.value)} className="input tabular-nums" />
-          </Field>
-          <Field label="Team lead">
-            <input value={form.team_lead ?? ''} onChange={e => set('team_lead', e.target.value)} className="input" />
-          </Field>
-          <Field label="Team members" hint="Separate names with commas.">
-            <input value={form.team_members ?? ''} onChange={e => set('team_members', e.target.value)} className="input" placeholder="Ravi, Suresh" />
-          </Field>
-          <Field label="Notes" className="sm:col-span-2">
-            <textarea value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} className="input resize-none" rows={3} />
-          </Field>
-        </fieldset>
+        <section className="border-t border-gray-100 pt-5">
+          <h3 className="section-title mb-3">Schedule and team</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Scheduled date">
+              <DatePicker value={form.scheduled_date} onChange={v => set('scheduled_date', v)} ariaLabel="Scheduled date" />
+            </Field>
+            <Field label="Completion date">
+              <DatePicker value={form.completion_date} onChange={v => set('completion_date', v)} ariaLabel="Completion date" />
+            </Field>
+            <Field label="Team lead">
+              <input value={form.team_lead ?? ''} onChange={e => set('team_lead', e.target.value)} className="input" />
+            </Field>
+            <Field label="Team members" hint="Separate names with commas.">
+              <input value={form.team_members ?? ''} onChange={e => set('team_members', e.target.value)} className="input" placeholder="Ravi, Suresh" />
+            </Field>
+            <Field label="Notes" className="sm:col-span-2">
+              <textarea value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} className="input resize-none" rows={3} />
+            </Field>
+          </div>
+        </section>
       </form>
     </Modal>
   )

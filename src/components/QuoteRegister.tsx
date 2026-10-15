@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
-  Plus, Trash2, Copy, ChevronDown, Check, GitBranch, History, MoreHorizontal,
+  Plus, Trash2, Copy, ChevronDown, GitBranch, History, MoreHorizontal,
   FileText, Pencil, FileDown,
 } from 'lucide-react'
 import type { Quote } from '@/lib/types'
@@ -10,6 +10,8 @@ import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { listCompanies } from '@/lib/companies'
 import { PageHeader, Stat, StatGrid, EmptyState, LoadingRows, SearchInput, StatusBadge, statusDot } from '@/components/ui'
 import { fmtDate } from '@/lib/format'
+import { confirmDialog, toast } from '@/components/feedback'
+import { Menu, MenuItem, MenuSeparator } from '@/components/controls'
 
 const TIER_LABEL: Record<string, string> = {
   dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifier', manual: 'Manual', manual_custom: 'Custom',
@@ -94,11 +96,14 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
   }
 
   async function deleteQuote(id: string, name: string) {
-    if (!confirm(`Delete the quote for "${name}"? This cannot be undone.`)) return
+    const ok = await confirmDialog({ title: 'Delete quote', body: `The quote for "${name}" will be permanently deleted.`, confirmLabel: 'Delete quote', tone: 'danger' })
+    if (!ok) return
     setBusy(id)
-    await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
-    setQuotes(prev => prev.filter(q => q.id !== id))
+    const res = await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
     setBusy(null)
+    if (!res.ok) { toast('Could not delete the quote', { tone: 'error' }); return }
+    setQuotes(prev => prev.filter(q => q.id !== id))
+    toast('Quote deleted')
   }
 
   async function duplicateQuote(quote: Quote) {
@@ -116,8 +121,9 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const created = await res.json()
     setBusy(null)
+    const created = await res.json().catch(() => null)
+    if (!res.ok || !created?.id) { toast('Could not duplicate the quote', { tone: 'error' }); return }
     window.location.href = `/quotes/${created.id}/edit`
   }
 
@@ -128,7 +134,7 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
     })
     setBusy(null)
-    if (!res.ok) { alert('Could not create a revision.'); return }
+    if (!res.ok) { toast('Could not create a revision', { tone: 'error' }); return }
     const created = await res.json()
     window.location.href = `/quotes/${created.id}/edit`
   }
@@ -238,19 +244,6 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
   )
 }
 
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    function onClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) close() }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') close() }
-    document.addEventListener('mousedown', onClick)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
-  }, [open, close])
-  return ref
-}
-
 function QuoteRow({ quote, busy, onDelete, onDuplicate, onRevise, onStatusChange }: {
   quote: Quote
   busy: boolean
@@ -259,13 +252,6 @@ function QuoteRow({ quote, busy, onDelete, onDuplicate, onRevise, onStatusChange
   onRevise: () => void
   onStatusChange: (s: QuoteStatus) => void
 }) {
-  const [statusOpen, setStatusOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const closeStatus = useCallback(() => setStatusOpen(false), [])
-  const closeMenu = useCallback(() => setMenuOpen(false), [])
-  const statusRef = useDismiss(statusOpen, closeStatus)
-  const menuRef = useDismiss(menuOpen, closeMenu)
-
   const status = getStatus(quote)
   const date = fmtDate(quote.date)
   const itemCount = quote.items?.length ?? 0
@@ -294,54 +280,42 @@ function QuoteRow({ quote, busy, onDelete, onDuplicate, onRevise, onStatusChange
       </td>
       <td className="hidden lg:table-cell text-xs text-gray-600 tabular-nums whitespace-nowrap">{date}</td>
       <td>
-        <div ref={statusRef} className="relative inline-block">
-          <button onClick={() => setStatusOpen(v => !v)} aria-haspopup="listbox" className="group inline-flex items-center gap-0.5">
+        <Menu align="start" width={168} label="Change status" trigger={p => (
+          <button {...p} type="button" aria-label={`Status: ${STATUS_LABELS[status]}. Change status`} className="group inline-flex items-center gap-0.5 rounded-md">
             <StatusBadge status={status} />
             <ChevronDown size={13} className="text-gray-400 group-hover:text-gray-700" />
           </button>
-          {statusOpen && (
-            <div className="absolute top-full left-0 mt-1 w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-lg z-20 animate-scale-in origin-top-left" role="listbox">
-              {STATUSES.map(s => (
-                <button key={s} role="option" aria-selected={s === status} onClick={() => { onStatusChange(s); setStatusOpen(false) }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 h-8 text-[13px] text-gray-700 hover:bg-gray-100">
-                  <span className={`dot ${statusDot(s)}`} />
-                  <span className="flex-1 text-left">{STATUS_LABELS[s]}</span>
-                  {s === status && <Check size={14} className="text-brand-600" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        )}>
+          {close => STATUSES.map(s => (
+            <MenuItem key={s} role="menuitemradio" selected={s === status} onClick={() => { close(); if (s !== status) onStatusChange(s) }}>
+              <span className="inline-flex items-center gap-2"><span className={`dot ${statusDot(s)}`} />{STATUS_LABELS[s]}</span>
+            </MenuItem>
+          ))}
+        </Menu>
       </td>
       <td className="num font-medium text-gray-900 whitespace-nowrap">{grandTotal > 0 ? fmtINR(grandTotal) : '—'}</td>
       <td className="text-right">
-        <div ref={menuRef} className="relative inline-block">
-          <button onClick={() => setMenuOpen(v => !v)} className="btn-ghost btn-icon" aria-label="Quote actions" aria-haspopup="menu" disabled={busy}>
+        <Menu label="Quote actions" trigger={p => (
+          <button {...p} type="button" className="btn-ghost btn-icon" aria-label="Quote actions" disabled={busy}>
             <MoreHorizontal size={16} />
           </button>
-          {menuOpen && (
-            <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-gray-200 bg-white p-1 shadow-lg z-20 animate-scale-in origin-top-right text-left">
+        )}>
+          {close => (
+            <>
               <MenuItem href={`/quotes/${quote.id}/edit`} icon={Pencil}>Edit quote</MenuItem>
               <MenuItem href={`/quotes/${quote.id}/client`} icon={FileDown}>Client PDF</MenuItem>
               <MenuItem href={`/quotes/${quote.id}/revisions`} icon={History}>Revision history</MenuItem>
-              <div className="my-1 border-t border-gray-100" />
-              <MenuItem onClick={() => { setMenuOpen(false); onRevise() }} icon={GitBranch}>Create revision</MenuItem>
-              <MenuItem onClick={() => { setMenuOpen(false); onDuplicate() }} icon={Copy}>Duplicate</MenuItem>
-              <div className="my-1 border-t border-gray-100" />
-              <MenuItem onClick={() => { setMenuOpen(false); onDelete() }} icon={Trash2} danger>Delete</MenuItem>
-            </div>
+              <MenuSeparator />
+              <MenuItem onClick={() => { close(); onRevise() }} icon={GitBranch}>Create revision</MenuItem>
+              <MenuItem onClick={() => { close(); onDuplicate() }} icon={Copy}>Duplicate</MenuItem>
+              <MenuSeparator />
+              <MenuItem onClick={() => { close(); onDelete() }} icon={Trash2} tone="danger">Delete</MenuItem>
+            </>
           )}
-        </div>
+        </Menu>
       </td>
     </tr>
   )
 }
 
-function MenuItem({ href, onClick, icon: Icon, children, danger }: {
-  href?: string; onClick?: () => void; icon: typeof Pencil; children: React.ReactNode; danger?: boolean
-}) {
-  const cls = `flex w-full items-center gap-2 rounded-md px-2 h-8 text-[13px] ${danger ? 'text-red-700 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-100'}`
-  const inner = <><Icon size={14} className={danger ? '' : 'text-gray-400'} />{children}</>
-  if (href) return <a role="menuitem" href={href} className={cls}>{inner}</a>
-  return <button role="menuitem" type="button" onClick={onClick} className={cls}>{inner}</button>
-}
+

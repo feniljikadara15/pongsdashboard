@@ -42,7 +42,7 @@ export default async function UserDetailPage({ params }: { params: { id: string 
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="table-wrap">
-          <div className="flex items-center justify-between px-5 h-12 border-b border-gray-200">
+          <div className="card-header">
             <h2 className="card-title">Permissions</h2>
             <span className="text-xs text-gray-500">{isAdmin ? 'Administrators can do everything' : 'Set individually for this user'}</span>
           </div>

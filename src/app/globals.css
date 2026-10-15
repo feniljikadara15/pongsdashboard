@@ -44,8 +44,15 @@
   h1, h2, h3, h4 { color: var(--ink); letter-spacing: -0.012em; }
   ::selection { background: #d8ede3; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* Number fields read as plain inputs; spinners are noise in a data form. */
   input[type='number']::-webkit-inner-spin-button,
-  input[type='number']::-webkit-outer-spin-button { opacity: 0.4; }
+  input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+  input[type='search']::-webkit-search-cancel-button { -webkit-appearance: none; }
+  input[type='file'] { @apply text-[13px] text-gray-600; }
+  input[type='file']::file-selector-button {
+    @apply mr-3 h-8 cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-800 hover:bg-gray-50;
+  }
 }
 
 @layer components {
@@ -68,6 +75,10 @@
   .btn-danger {
     @apply btn bg-white border border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300;
   }
+  .btn-destructive {
+    @apply btn text-white bg-red-600 hover:bg-red-700;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 2px rgb(18 18 17 / 0.12);
+  }
   .btn-ghost {
     @apply btn text-gray-600 hover:bg-gray-100 hover:text-gray-900;
   }
@@ -86,6 +97,16 @@
     @apply flex items-center justify-between gap-3 px-5 h-12 border-b border-gray-200;
   }
   .card-title { @apply text-[13px] font-semibold text-gray-900; }
+  /* Secondary navigation link in a card header, always with a trailing chevron. */
+  .card-link {
+    @apply inline-flex items-center gap-0.5 rounded text-xs font-medium text-gray-600 transition-colors hover:text-gray-900 whitespace-nowrap;
+  }
+  .card-link::after {
+    content: '';
+    @apply inline-block h-3.5 w-3.5 bg-current opacity-60;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
   .card-body { @apply p-5; }
 
   /* ---------- Forms ---------- */
@@ -106,10 +127,42 @@
     background-position: right 0.5rem center;
     background-size: 14px;
   }
-  .checkbox {
-    @apply h-4 w-4 rounded border-gray-300 cursor-pointer;
-    accent-color: var(--accent);
+  /* Custom checkbox and radio: native semantics, branded drawing. */
+  .checkbox, .radio {
+    @apply relative inline-block h-4 w-4 shrink-0 cursor-pointer appearance-none border border-gray-300 bg-white align-middle
+      transition-[background-color,border-color,box-shadow] duration-150 hover:border-gray-400
+      disabled:cursor-not-allowed disabled:opacity-50;
+    box-shadow: 0 1px 1px rgb(18 18 17 / 0.04);
   }
+  .checkbox { @apply rounded-[4px]; }
+  .radio { @apply rounded-full; }
+  .checkbox:checked, .checkbox:indeterminate, .radio:checked {
+    border-color: var(--accent);
+    background-color: var(--accent);
+  }
+  .checkbox:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 8.5 2.5 2.5L12 5.5'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+  }
+  .checkbox:indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round'%3E%3Cpath d='M4.5 8h7'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+  }
+  .radio:checked { box-shadow: inset 0 0 0 3px white; }
+  .checkbox:focus-visible, .radio:focus-visible { @apply outline-none; box-shadow: 0 0 0 3px rgb(31 109 82 / 0.18); }
+
+  /* Toggle switch built on a checkbox. */
+  .switch {
+    @apply relative inline-flex h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full bg-gray-300 align-middle
+      transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .switch::after {
+    content: '';
+    @apply absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150;
+  }
+  .switch:checked { background-color: var(--accent); }
+  .switch:checked::after { transform: translateX(16px); }
+  .switch:focus-visible { @apply outline-none; box-shadow: 0 0 0 3px rgb(31 109 82 / 0.18); }
 
   /* ---------- Badges ---------- */
   .badge {
@@ -143,13 +196,16 @@
   .table-wrap > table:first-child thead th:first-child { border-top-left-radius: 0.5rem; }
   .table-wrap > .table-scroll:first-child thead th:last-child,
   .table-wrap > table:first-child thead th:last-child { border-top-right-radius: 0.5rem; }
-  .table-footer { @apply flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50/60 px-4 h-10 text-xs text-gray-500 rounded-b-lg; }
+  .table-footer { @apply flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50/60 px-5 h-10 text-xs text-gray-500 rounded-b-lg; }
   .table { @apply w-full text-[13px] border-collapse; }
   .table thead th {
     @apply h-9 px-4 text-left text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-200 whitespace-nowrap;
   }
   .table tbody td { @apply px-4 py-3 border-b border-gray-100 text-gray-700 align-middle; }
   .table tbody tr:last-child td { @apply border-b-0; }
+  /* Outer cells line up with card headers and footers (20px inset). */
+  .table thead th:first-child, .table tbody td:first-child { @apply pl-5; }
+  .table thead th:last-child, .table tbody td:last-child { @apply pr-5; }
   .table tbody tr { @apply transition-colors; }
   .table-hover tbody tr:hover { @apply bg-gray-50/70; }
   .table .num { @apply text-right tabular-nums; }
@@ -192,7 +248,7 @@
 
   .modal-backdrop { @apply fixed inset-0 z-[60] bg-gray-950/40 flex items-center justify-center p-4 animate-fade-in; }
   .modal { @apply bg-white rounded-xl border border-gray-200 shadow-xl w-full animate-scale-in; }
-  .modal-header { @apply flex items-center justify-between px-5 h-14 border-b border-gray-200; }
+  .modal-header { @apply flex items-center justify-between gap-3 px-5 py-3 min-h-[56px] border-b border-gray-200; }
   .modal-title { @apply text-[15px] font-semibold text-gray-900; }
   .modal-body { @apply p-5; }
   .modal-footer { @apply flex items-center justify-end gap-2 px-5 py-3.5 border-t border-gray-200 bg-gray-50/60 rounded-b-xl; }
