@@ -10,8 +10,8 @@ interface User { id: string; name: string; email: string; role: string; access_l
 
 const CELL: Record<AccessLevel, { label: string; cls: string }> = {
   full: { label: 'Full', cls: 'bg-brand-50 text-brand-800 ring-brand-200/70' },
-  edit: { label: 'Edit', cls: 'bg-sky-50 text-sky-800 ring-sky-200/70' },
-  view: { label: 'View', cls: 'bg-gray-50 text-gray-700 ring-gray-200' },
+  edit: { label: 'Edit', cls: 'bg-white text-gray-900 ring-gray-300' },
+  view: { label: 'View', cls: 'bg-gray-50 text-gray-500 ring-gray-200' },
   none: { label: 'None', cls: 'text-gray-300 ring-transparent' },
 }
 

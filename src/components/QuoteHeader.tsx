@@ -1,7 +1,7 @@
 import { Pencil } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { StatusBadge } from '@/components/ui'
-import ConvertToProjectButton from '@/components/ConvertToProjectButton'
+import QuoteNextStep from '@/components/QuoteNextStep'
 import PrintButton from '@/components/PrintButton'
 import { fmtDate } from '@/lib/format'
 
@@ -51,9 +51,12 @@ export default function QuoteHeader({
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary"><Pencil size={14} /> Edit</a>
-          <ConvertToProjectButton quoteId={quote.id} projectId={projectId ?? null} />
           {printable && <PrintButton />}
         </div>
+      </div>
+      <div className="mt-5">
+        <QuoteNextStep quoteId={quote.id} status={String(quote.status ?? 'draft')} projectId={projectId ?? null}
+          clientName={quote.clientName} onClientTab={active === 'client'} />
       </div>
       <nav className="tabs mt-5" aria-label="Quote views">
         {tabs.map(t => (

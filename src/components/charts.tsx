@@ -1,13 +1,10 @@
 'use client'
 import { useState, type ReactNode } from 'react'
 
-// Chart conventions shared by every chart in the product. Colours were run
-// through the dataviz palette validator against the white chart surface.
-
-// Single-series marks (brand green, chroma-adjusted so it reads as a hue).
-export const CHART_PRIMARY = '#1f8a63'
-// Fixed categorical order, never cycled. A ninth series folds into "Other".
-export const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']
+// Chart conventions shared by every chart in the product. Charts are single
+// series in the brand colour (brand-600), so data reads as part of the same
+// restrained palette as the rest of the UI.
+export const CHART_PRIMARY = '#1f6d52'
 
 export const AXIS_TICK = { fontSize: 11, fill: '#76766f' }
 export const GRID_STROKE = '#ececea'

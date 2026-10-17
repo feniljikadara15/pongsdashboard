@@ -75,7 +75,9 @@ export default function MovementsPage() {
           <span className="ml-auto text-xs text-gray-500">{filtered.length} of {movements.length}</span>
         </div>
         {loading ? <LoadingRows rows={6} cols={5} /> : filtered.length === 0 ? (
-          <EmptyState icon={ArrowLeftRight} title={movements.length ? 'No movements match these filters' : 'No movements recorded'} />
+          <EmptyState icon={ArrowLeftRight} title={movements.length ? 'No movements match these filters' : 'No movements recorded'}
+            description={movements.length ? 'Try another product or direction.' : 'Record stock you receive or issue to a site. Received purchase orders are added automatically.'}
+            action={movements.length ? undefined : <button onClick={() => setShowForm(true)} className="btn-primary"><Plus size={15} /> Record movement</button>} />
         ) : (
           <div className="table-scroll">
             <table className="table">

@@ -7,6 +7,8 @@ import type { Quote } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { fmtDate, fmtDateLong, monthShort, toDate } from '@/lib/format'
 import { PageHeader, Stat, StatGrid, StatusBadge, EmptyState, LoadingRows, PageLoading } from '@/components/ui'
+import { AttentionCard, GettingStarted, type SetupStep } from '@/components/Guidance'
+import { buildAttention } from '@/lib/attention'
 
 type Row = Record<string, unknown>
 
@@ -26,11 +28,19 @@ export default function HomePage() {
   const [quotes, setQuotes] = useState<Quote[] | null>(null)
   const [projects, setProjects] = useState<Row[] | null>(null)
   const [lowStock, setLowStock] = useState<Row[] | null>(null)
+  const [finance, setFinance] = useState<Row[] | null>(null)
+  const [clientCount, setClientCount] = useState<number | null>(null)
+  const [productCount, setProductCount] = useState<number | null>(null)
+  const [userCount, setUserCount] = useState<number | null>(null)
+  const [pendingRequests, setPendingRequests] = useState(0)
   const [loadError, setLoadError] = useState('')
 
   const canQuotes = can(me, 'quotes', 'view')
   const canProjects = can(me, 'projects', 'view')
   const canInventory = can(me, 'inventory', 'view')
+  const canClients = can(me, 'clients', 'view')
+  const canFinance = can(me, 'finance', 'view')
+  const isAdmin = !!me?.isAdmin
 
   useEffect(() => {
     if (!me) return
@@ -41,7 +51,16 @@ export default function HomePage() {
     }).catch(() => { setLoadError('Could not reach the server.'); setQuotes([]) })
     if (canProjects) fetch('/api/projects').then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => setProjects([]))
     if (canInventory) fetch('/api/notifications').then(r => r.json()).then(d => setLowStock(d?.lowStock ?? [])).catch(() => setLowStock([]))
-  }, [me, canQuotes, canProjects, canInventory])
+    const count = (url: string, set: (n: number) => void) =>
+      fetch(url).then(r => r.json()).then(d => set(Array.isArray(d) ? d.length : 0)).catch(() => { /* optional */ })
+    if (canInventory) count('/api/inventory/products', setProductCount)
+    if (canClients) count('/api/clients', setClientCount)
+    if (canFinance) fetch('/api/finance').then(r => r.json()).then(d => setFinance(Array.isArray(d) ? d : [])).catch(() => setFinance([]))
+    if (isAdmin) {
+      count('/api/users', setUserCount)
+      count('/api/access-requests?status=pending', setPendingRequests)
+    }
+  }, [me, canQuotes, canProjects, canInventory, canClients, canFinance, isAdmin])
 
   if (loading) return <PageLoading />
 
@@ -66,6 +85,29 @@ export default function HomePage() {
     .filter(x => String(x.scheduled_date ?? '') >= today && String(x.scheduled_date ?? '') <= in14 && !['completed', 'invoiced', 'cancelled'].includes(String(x.status)))
     .sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)))
 
+  const attention = buildAttention({
+    quotes: canQuotes ? quotes : null,
+    projects: canProjects ? projects : null,
+    finance: canFinance ? finance : null,
+    lowStock: canInventory ? lowStock : null,
+    pendingRequests,
+    fmtMoney: fmtINR,
+  })
+  const attentionLoading = (canQuotes && !quotes) || (canProjects && !projects)
+
+  // First-run guide. A step only appears when this user can act on it.
+  const firstDraft = q.find(x => status(x) === 'draft')
+  const toConvert = q.find(x => status(x) === 'approved' && !p.some(pr => pr.quote_id === x.id))
+  const setup: SetupStep[] = []
+  if (canClients && clientCount !== null) setup.push({ id: 'client', title: 'Add your first client', description: 'Keep contacts in one place. Their quotes and projects link to them automatically.', done: clientCount > 0, href: '/clients?new=1', cta: 'Add client' })
+  if (canQuotes && quotes) {
+    setup.push({ id: 'quote', title: 'Create a quotation', description: 'Enter the ceiling sizes and options. Pricing, area and GST are calculated for you.', done: q.length > 0, href: '/quotes/new', cta: 'New quote' })
+    setup.push({ id: 'send', title: 'Send a quote to a client', description: 'Open the quote, share the client PDF and mark it as sent so it is tracked for follow-up.', done: q.some(x => status(x) !== 'draft'), href: firstDraft ? `/quotes/${firstDraft.id}/team` : '/quotes', cta: 'Open quote' })
+  }
+  if (canProjects && projects) setup.push({ id: 'project', title: 'Turn an approved quote into a project', description: 'Projects carry the schedule, team, site checklist and payments.', done: p.length > 0, href: toConvert ? `/quotes/${toConvert.id}/team` : '/quotes', cta: toConvert ? 'Convert' : 'View quotes' })
+  if (canInventory && productCount !== null) setup.push({ id: 'products', title: 'Add your inventory products', description: 'Track fabric, profiles and lighting stock, and get reorder alerts.', done: productCount > 0, href: '/inventory/products?new=1', cta: 'Add product' })
+  if (isAdmin && userCount !== null) setup.push({ id: 'team', title: 'Invite your team', description: 'Give sales, installers and managers access to just the modules they need.', done: userCount > 1, href: '/users/all?new=1', cta: 'Add user' })
+
   const recent = [...q].sort((a, b) => String(b.updatedAt ?? b.date).localeCompare(String(a.updatedAt ?? a.date))).slice(0, 6)
   const firstName = me?.name?.split(' ')[0]
 
@@ -73,7 +115,10 @@ export default function HomePage() {
     <div className="animate-fade-in">
       <PageHeader
         title={`${greeting()}${firstName ? `, ${firstName}` : ''}`}
-        description={fmtDateLong(new Date(), { weekday: true })}
+        description={
+          attentionLoading ? fmtDateLong(new Date(), { weekday: true })
+            : `${fmtDateLong(new Date(), { weekday: true })} · ${attention.length === 0 ? 'Nothing needs your attention' : `${attention.length} ${attention.length === 1 ? 'thing needs' : 'things need'} your attention`}`
+        }
         actions={canQuotes ? <a href="/quotes/new" className="btn-primary"><Plus size={15} strokeWidth={2.25} /> New quote</a> : undefined}
       />
 
@@ -83,13 +128,17 @@ export default function HomePage() {
         </div>
       )}
 
+      <GettingStarted steps={setup} extra={isAdmin && q.length === 0 ? (
+        <>Just exploring? <a href="/admin/import" className="font-medium text-gray-900 underline-offset-2 hover:underline">Load sample data</a> to see the app with realistic records. You can remove it later.</>
+      ) : undefined} />
+
       <StatGrid>
         {canQuotes && (
           <>
             <Stat label="Open pipeline" value={quotes ? fmtINR(open.reduce((s, x) => s + totalOf(x), 0)) : '—'}
-              hint={quotes ? `${open.length} quotes in draft or sent` : ' '} href="/quotes" />
+              hint={quotes ? `${open.length} ${open.length === 1 ? 'quote' : 'quotes'} in draft or sent` : ' '} href="/quotes" />
             <Stat label="Won this month" value={quotes ? fmtINR(won.filter(x => x.date?.startsWith(month)).reduce((s, x) => s + totalOf(x), 0)) : '—'}
-              hint={quotes ? (decided ? `${Math.round((won.length / decided) * 100)}% win rate overall` : 'No decisions yet') : ' '} tone="success" />
+              hint={quotes ? (decided ? `${Math.round((won.length / decided) * 100)}% win rate overall` : 'No decisions yet') : ' '} tone={decided ? 'success' : 'neutral'} />
           </>
         )}
         {canProjects && (
@@ -103,42 +152,45 @@ export default function HomePage() {
       </StatGrid>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {canQuotes && (
-          <section className="table-wrap lg:col-span-2">
-            <div className="card-header">
-              <h2 className="card-title">Recent quotations</h2>
-              <a href="/quotes" className="card-link">View all</a>
-            </div>
-            {!quotes ? <LoadingRows rows={5} cols={4} /> : recent.length === 0 ? (
-              <EmptyState icon={FileText} title="No quotations yet" description="Your latest quotations will appear here."
-                action={<a href="/quotes/new" className="btn-secondary btn-sm"><Plus size={14} /> New quote</a>} compact />
-            ) : (
-              <div className="table-scroll">
-                <table className="table table-hover">
-                  <tbody>
-                    {recent.map(x => (
-                      <tr key={x.id} className="cursor-pointer" onClick={() => { window.location.href = `/quotes/${x.id}/team` }}>
-                        <td className="w-[96px]"><span className="mono text-xs text-gray-500">{x.quoteNumber}</span></td>
-                        <td className="max-w-[280px]">
-                          <div className="truncate font-medium text-gray-900">{x.clientName}</div>
-                          <div className="truncate text-xs text-gray-500">{[x.projectName, x.location].filter(Boolean).join(' · ') || '—'}</div>
-                        </td>
-                        <td className="hidden sm:table-cell"><StatusBadge status={status(x)} /></td>
-                        <td className="num font-medium text-gray-900 whitespace-nowrap">{fmtINR(totalOf(x))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        <div className="space-y-4 lg:col-span-2 min-w-0">
+          <AttentionCard items={attention} loading={attentionLoading} />
+          {canQuotes && (
+            <section className="table-wrap">
+              <div className="card-header">
+                <h2 className="card-title">Recent quotations</h2>
+                <a href="/quotes" className="card-link">View all</a>
               </div>
-            )}
-            {quotes && sentAwaiting.length > 0 && (
-              <div className="table-footer">
-                <span>{sentAwaiting.length} sent {sentAwaiting.length === 1 ? 'quote is' : 'quotes are'} awaiting a client decision</span>
-                <span className="tabular-nums">{fmtINR(sentAwaiting.reduce((s, x) => s + totalOf(x), 0))}</span>
-              </div>
-            )}
-          </section>
-        )}
+              {!quotes ? <LoadingRows rows={5} cols={4} /> : recent.length === 0 ? (
+                <EmptyState icon={FileText} title="No quotations yet" description="Your latest quotations will appear here."
+                  action={<a href="/quotes/new" className="btn-secondary btn-sm"><Plus size={14} /> New quote</a>} compact />
+              ) : (
+                <div className="table-scroll">
+                  <table className="table table-hover">
+                    <tbody>
+                      {recent.map(x => (
+                        <tr key={x.id} className="cursor-pointer" onClick={() => { window.location.href = `/quotes/${x.id}/team` }}>
+                          <td className="w-[96px]"><span className="mono text-xs text-gray-500">{x.quoteNumber}</span></td>
+                          <td className="max-w-[280px]">
+                            <div className="truncate font-medium text-gray-900">{x.clientName}</div>
+                            <div className="truncate text-xs text-gray-500">{[x.projectName, x.location].filter(Boolean).join(' · ') || '—'}</div>
+                          </td>
+                          <td className="hidden sm:table-cell"><StatusBadge status={status(x)} /></td>
+                          <td className="num font-medium text-gray-900 whitespace-nowrap">{fmtINR(totalOf(x))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {quotes && sentAwaiting.length > 0 && (
+                <div className="table-footer">
+                  <span>{sentAwaiting.length} sent {sentAwaiting.length === 1 ? 'quote is' : 'quotes are'} awaiting a client decision</span>
+                  <span className="tabular-nums">{fmtINR(sentAwaiting.reduce((s, x) => s + totalOf(x), 0))}</span>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
 
         <div className="space-y-4">
           {canProjects && (
@@ -148,7 +200,7 @@ export default function HomePage() {
                 <a href="/projects/calendar" className="card-link">Schedule</a>
               </div>
               {!projects ? <LoadingRows rows={3} cols={2} /> : upcoming.length === 0 ? (
-                <EmptyState icon={CalendarClock} title="Nothing in the next two weeks" compact />
+                <EmptyState icon={CalendarClock} title="Nothing in the next two weeks" description="Projects with an installation date appear here." compact />
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {upcoming.slice(0, 5).map(x => {
@@ -182,7 +234,10 @@ export default function HomePage() {
                 <a href="/inventory/reorder" className="card-link">Reorder list</a>
               </div>
               {!lowStock ? <LoadingRows rows={3} cols={2} /> : lowStock.length === 0 ? (
-                <EmptyState icon={PackageCheck} title="All products above minimum" compact />
+                productCount === 0 ? (
+                <EmptyState icon={PackageCheck} title="No products tracked yet" description="Add products to get alerts before stock runs out."
+                  action={<a href="/inventory/products?new=1" className="btn-secondary btn-sm">Add product</a>} compact />
+              ) : <EmptyState icon={PackageCheck} title="All products above minimum" compact />
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {lowStock.slice(0, 6).map(x => {

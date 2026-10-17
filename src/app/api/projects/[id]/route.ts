@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+import { teamMembersList } from '@/lib/team'
 import { NextRequest, NextResponse } from 'next/server'
 import { initProjectsTables, getDbClient } from '@/lib/db'
 import { requirePermission } from '@/lib/session'
@@ -24,7 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const now = new Date().toISOString()
   await db.execute(
     `UPDATE projects SET name=?,client_name=?,client_phone=?,client_email=?,site_address=?,city=?,status=?,scheduled_date=?,completion_date=?,team_lead=?,team_members=?,ceiling_area_sqft=?,contract_value=?,priority=?,notes=?,updated_at=? WHERE id=?`,
-    [b.name,b.client_name,b.client_phone??null,b.client_email??null,b.site_address??null,b.city??null,b.status??'scheduled',b.scheduled_date??null,b.completion_date??null,b.team_lead??null,JSON.stringify(b.team_members??[]),Number(b.ceiling_area_sqft??0),Number(b.contract_value??0),b.priority??'normal',b.notes??null,now,params.id]
+    [b.name,b.client_name,b.client_phone??null,b.client_email??null,b.site_address??null,b.city??null,b.status??'scheduled',b.scheduled_date??null,b.completion_date??null,b.team_lead??null,JSON.stringify(teamMembersList(b.team_members)),Number(b.ceiling_area_sqft??0),Number(b.contract_value??0),b.priority??'normal',b.notes??null,now,params.id]
   )
   const r = await db.execute('SELECT * FROM projects WHERE id = ?', [params.id])
   return NextResponse.json(r.rows[0])

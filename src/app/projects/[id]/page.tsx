@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Pencil, Plus, Trash2, FileText, Receipt, Wallet, MessageSquare, HardHat } from 'lucide-react'
-import { StatusBadge, Badge, EmptyState, Modal, Field, PageLoading, Avatar } from '@/components/ui'
+import { Pencil, Plus, Trash2, FileText, Receipt, Wallet, MessageSquare, HardHat, Play, CheckCircle2, ReceiptText, RotateCcw, ListChecks, UserPlus } from 'lucide-react'
+import { StatusBadge, Badge, EmptyState, Modal, Field, PageLoading, Avatar, NextStep, type StepState } from '@/components/ui'
 import ProjectFormModal, { PROJECT_STATUS_LABELS, teamMembersText, type Project as FormProject } from '@/components/ProjectFormModal'
 import { fmtINR, fmtDate } from '@/lib/format'
 import { Select, DatePicker } from '@/components/controls'
@@ -118,6 +118,20 @@ export default function ProjectDetailPage() {
     loadProject()
   }
 
+  // One-click lifecycle moves from the Next step panel. The API expects the
+  // whole record, so send the current project with the new status.
+  const moveTo = async (status: string, message: string) => {
+    if (!project) return
+    setSaving(true)
+    const today = new Date().toISOString().slice(0, 10)
+    const body = { ...project, status, completion_date: status === 'completed' && !project.completion_date ? today : project.completion_date }
+    const res = await fetch(`/api/projects/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    setSaving(false)
+    if (!res.ok) { toast('Could not update the project', { tone: 'error', description: res.status === 403 ? 'You do not have permission to edit projects.' : undefined }); return }
+    toast(message)
+    loadProject()
+  }
+
   if (loading) return <PageLoading />
   if (!project) {
     return (
@@ -158,9 +172,21 @@ export default function ProjectDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {project.quote_id && <a href={`/quotes/${project.quote_id}/team`} className="btn-secondary"><FileText size={14} /> Source quote</a>}
-          <button onClick={() => setEditing(true)} className="btn-primary"><Pencil size={14} /> Edit project</button>
+          <button onClick={() => setEditing(true)} className="btn-secondary"><Pencil size={14} /> Edit project</button>
         </div>
       </div>
+
+      <ProjectNextStep
+        project={project}
+        outstanding={contractValue - totalPaid}
+        checkDone={checklist.filter(c => c.done).length}
+        checkTotal={checklist.length}
+        busy={saving}
+        onMove={moveTo}
+        onEdit={() => setEditing(true)}
+        onPay={() => setShowPayModal(true)}
+        onChecklist={() => setTab('checklist')}
+      />
 
       {/* Financials */}
       <section className="card mb-6">
@@ -246,7 +272,8 @@ export default function ProjectDetailPage() {
                   <p className="text-[13px] text-gray-800 whitespace-pre-line">{updates[0].note}</p>
                   <p className="mt-2 text-xs text-gray-500">{fmtDate(updates[0].created_at)}{updates[0].created_by ? ` · ${updates[0].created_by}` : ''}</p>
                 </div>
-              ) : <EmptyState icon={MessageSquare} title="No updates yet" compact />}
+              ) : <EmptyState icon={MessageSquare} title="No updates yet" description="Post site progress so everyone knows where the job stands."
+                  action={<button className="btn-secondary btn-sm" onClick={() => setTab('updates')}><Plus size={14} /> Post an update</button>} compact />}
             </section>
           </div>
         </div>
@@ -259,7 +286,7 @@ export default function ProjectDetailPage() {
               <h2 className="card-title">Payments received</h2>
               <button onClick={() => setShowPayModal(true)} className="btn-secondary btn-sm"><Plus size={14} /> Record payment</button>
             </div>
-            {payments.length === 0 ? <EmptyState icon={Wallet} title="No payments recorded" compact /> : (
+            {payments.length === 0 ? <EmptyState icon={Wallet} title="No payments recorded" description="Record advances and payments as they arrive to track what is still due." compact /> : (
               <div className="table-scroll">
                 <table className="table">
                   <thead><tr><th>Date</th><th>Type</th><th>Method</th><th className="hidden sm:table-cell">Reference</th><th className="num">Amount</th></tr></thead>
@@ -285,7 +312,7 @@ export default function ProjectDetailPage() {
               <h2 className="card-title">Expenses</h2>
               <button onClick={() => setShowExpModal(true)} className="btn-secondary btn-sm"><Plus size={14} /> Add expense</button>
             </div>
-            {expenses.length === 0 ? <EmptyState icon={Receipt} title="No expenses recorded" compact /> : (
+            {expenses.length === 0 ? <EmptyState icon={Receipt} title="No expenses recorded" description="Add material, labour and transport costs to see the real profit on this job." compact /> : (
               <div className="table-scroll">
                 <table className="table">
                   <thead><tr><th>Date</th><th>Description</th><th>Category</th><th className="hidden sm:table-cell">Paid to</th><th className="num">Amount</th><th className="w-12"><span className="sr-only">Delete</span></th></tr></thead>
@@ -460,4 +487,86 @@ function Detail({ label, children, wide }: { label: string; children: React.Reac
       <dd className="mt-0.5 text-gray-900">{children}</dd>
     </div>
   )
+}
+
+const LIFECYCLE = ['scheduled', 'in_progress', 'completed', 'invoiced'] as const
+
+function ProjectNextStep({ project, outstanding, checkDone, checkTotal, busy, onMove, onEdit, onPay, onChecklist }: {
+  project: Project
+  outstanding: number
+  checkDone: number
+  checkTotal: number
+  busy: boolean
+  onMove: (status: string, message: string) => void
+  onEdit: () => void
+  onPay: () => void
+  onChecklist: () => void
+}) {
+  const status = project.status
+  const idx = LIFECYCLE.indexOf(status as typeof LIFECYCLE[number])
+  const paid = ['completed', 'invoiced'].includes(status) && outstanding <= 0
+  const steps: { label: string; state: StepState }[] = [
+    ...LIFECYCLE.map((s, i) => ({
+      label: PROJECT_STATUS_LABELS[s],
+      state: (idx < 0 ? 'upcoming' : i < idx ? 'done' : i === idx ? (s === 'invoiced' ? 'done' : 'current') : 'upcoming') as StepState,
+    })),
+    { label: 'Paid', state: paid && status === 'invoiced' ? 'done' : status === 'invoiced' ? 'current' : 'upcoming' },
+  ]
+  if (status === 'on_hold' || status === 'cancelled') steps.forEach(s => { if (s.state === 'current') s.state = 'upcoming' })
+
+  const today = new Date().toISOString().slice(0, 10)
+  const date = project.scheduled_date ? fmtDate(project.scheduled_date) : null
+  const overdue = !!project.scheduled_date && project.scheduled_date < today
+
+  if (status === 'on_hold') {
+    return <NextStep className="mb-6" steps={steps} tone="attention" title="This project is on hold"
+      description="Resume it when the site is ready. It returns to Scheduled so the team can plan the installation."
+      actions={<button className="btn-primary" disabled={busy} onClick={() => onMove('scheduled', 'Project resumed')}><RotateCcw size={14} /> Resume project</button>} />
+  }
+  if (status === 'cancelled') {
+    return <NextStep className="mb-6" steps={steps} tone="done" title="This project was cancelled" description="No further action is needed." />
+  }
+  if (status === 'scheduled') {
+    if (!project.scheduled_date || !project.team_lead) {
+      return <NextStep className="mb-6" steps={steps}
+        title={!project.scheduled_date ? 'Set an installation date and team lead' : 'Assign a team lead'}
+        description="The schedule and team lead tell everyone who installs where, and when."
+        actions={<button className="btn-primary" onClick={onEdit}><UserPlus size={14} /> Plan installation</button>} />
+    }
+    return <NextStep className="mb-6" steps={steps} tone={overdue ? 'attention' : 'default'}
+      title={overdue ? `The installation date (${date}) has passed` : `Installation on ${date} with ${project.team_lead}`}
+      description={overdue ? 'Start the installation if the team is on site, or change the date.' : 'When the team starts on site, mark the installation as started.'}
+      actions={<>
+        {overdue && <button className="btn-secondary" onClick={onEdit}>Change date</button>}
+        <button className="btn-primary" disabled={busy} onClick={() => onMove('in_progress', 'Installation started')}><Play size={14} /> Start installation</button>
+      </>} />
+  }
+  if (status === 'in_progress') {
+    const left = checkTotal - checkDone
+    return <NextStep className="mb-6" steps={steps}
+      title="Installation is under way"
+      description={checkTotal > 0
+        ? (left > 0 ? `${left} of ${checkTotal} checklist items still open. Mark the project completed once the site is handed over.` : 'Every checklist item is done. Mark the project completed.')
+        : 'Mark the project completed once the site is handed over.'}
+      actions={<>
+        {checkTotal > 0 && left > 0 && <button className="btn-secondary" onClick={onChecklist}><ListChecks size={14} /> Open checklist</button>}
+        <button className="btn-primary" disabled={busy} onClick={() => onMove('completed', 'Project marked completed')}><CheckCircle2 size={14} /> Mark completed</button>
+      </>} />
+  }
+  if (status === 'completed') {
+    return <NextStep className="mb-6" steps={steps}
+      title="Send the invoice"
+      description={outstanding > 0 ? `${fmtINR(outstanding)} is still due. Mark the project invoiced once the invoice has gone out.` : 'Payment is already complete. Mark the project invoiced to close it.'}
+      actions={<>
+        {outstanding > 0 && <button className="btn-secondary" onClick={onPay}><Wallet size={14} /> Record payment</button>}
+        <button className="btn-primary" disabled={busy} onClick={() => onMove('invoiced', 'Project marked invoiced')}><ReceiptText size={14} /> Mark invoiced</button>
+      </>} />
+  }
+  if (status === 'invoiced' && outstanding > 0) {
+    return <NextStep className="mb-6" steps={steps}
+      title={`Collect ${fmtINR(outstanding)} from ${project.client_name || 'the client'}`}
+      description="Record each payment as it arrives. The project closes once the balance reaches zero."
+      actions={<button className="btn-primary" onClick={onPay}><Wallet size={14} /> Record payment</button>} />
+  }
+  return <NextStep className="mb-6" steps={steps} tone="done" title="Installed, invoiced and fully paid" description="Nothing left to do on this project." />
 }

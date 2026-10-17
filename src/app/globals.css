@@ -168,20 +168,32 @@
   .badge {
     @apply inline-flex items-center gap-1.5 h-[22px] px-2 rounded-md text-xs font-medium whitespace-nowrap ring-1 ring-inset;
   }
-  .badge-neutral  { @apply badge bg-gray-50 text-gray-700 ring-gray-200; }
-  .badge-info     { @apply badge bg-sky-50 text-sky-800 ring-sky-200/70; }
-  .badge-success  { @apply badge bg-brand-50 text-brand-700 ring-brand-200/70; }
-  .badge-warning  { @apply badge bg-amber-50 text-amber-800 ring-amber-200/70; }
-  .badge-danger   { @apply badge bg-red-50 text-red-700 ring-red-200/70; }
-  .badge-accent   { @apply badge bg-violet-50 text-violet-700 ring-violet-200/70; }
+  /* Colour discipline: every badge shares one quiet neutral surface and the
+     status lives in a small dot. Only three hues carry meaning anywhere in
+     the product: brand green (done, positive), amber (needs attention) and
+     red (problem, destructive). "In flight" states use ink, not a new hue. */
+  .badge-neutral, .badge-info, .badge-success, .badge-warning, .badge-danger, .badge-accent {
+    @apply badge bg-white text-gray-700 ring-gray-200;
+  }
+  .badge-info::before, .badge-success::before, .badge-warning::before, .badge-danger::before,
+  .badge-accent::before, .badge-dot::before {
+    content: '';
+    @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full;
+  }
+  .badge-dot::before { @apply bg-gray-400; }
+  .badge-info::before { @apply bg-gray-800; }
+  .badge-success::before, .badge-accent::before { @apply bg-brand-600; }
+  .badge-warning::before { @apply bg-amber-500; }
+  .badge-danger::before { @apply bg-red-500; }
+  .badge-danger { @apply text-red-700; }
   /* Legacy aliases */
   .badge-draft     { @apply badge-neutral; }
   .badge-sent      { @apply badge-info; }
   .badge-approved  { @apply badge-success; }
   .badge-rejected  { @apply badge-danger; }
-  .badge-dealer    { @apply badge-accent; }
+  .badge-dealer    { @apply badge-neutral; }
   .badge-msp       { @apply badge-neutral; }
-  .badge-specifiors { @apply badge-warning; }
+  .badge-specifiors { @apply badge-neutral; }
   .dot { @apply inline-block w-1.5 h-1.5 rounded-full shrink-0; }
 
   /* ---------- Tables ---------- */

@@ -5,19 +5,20 @@ import { confirmDialog, toast } from '@/components/feedback'
 
 // Converts a quote into a project. When a project already exists for the quote
 // we link to it instead of offering a second conversion.
-export default function ConvertToProjectButton({ quoteId, projectId }: { quoteId: string; projectId: string | null }) {
+export default function ConvertToProjectButton({ quoteId, projectId, primary = false }: { quoteId: string; projectId: string | null; primary?: boolean }) {
+  const cls = primary ? 'btn-primary' : 'btn-secondary'
   const [converting, setConverting] = useState(false)
 
   if (projectId) {
     return (
-      <a href={`/projects/${projectId}`} className="btn-secondary">
-        <HardHat size={14} /> View project <ArrowUpRight size={13} className="text-gray-400" />
+      <a href={`/projects/${projectId}`} className={cls}>
+        <HardHat size={14} /> Open project <ArrowUpRight size={13} className="opacity-60" />
       </a>
     )
   }
 
   const convert = async () => {
-    const ok = await confirmDialog({ title: 'Convert to project', body: 'A project is created with this quote\'s client, site and contract value, and the quote is marked as approved.', confirmLabel: 'Create project' })
+    const ok = await confirmDialog({ title: 'Convert to project', body: 'A project is created with this quote\'s client, site and contract value, and the quote is marked as approved. You can then schedule the installation and track payments.', confirmLabel: 'Create project' })
     if (!ok) return
     setConverting(true)
     const r = await fetch(`/api/quotes/${quoteId}/to-project`, { method: 'POST' })
@@ -31,7 +32,7 @@ export default function ConvertToProjectButton({ quoteId, projectId }: { quoteId
   }
 
   return (
-    <button onClick={convert} disabled={converting} className="btn-secondary">
+    <button onClick={convert} disabled={converting} className={cls}>
       <HardHat size={14} /> {converting ? 'Creating project…' : 'Convert to project'}
     </button>
   )

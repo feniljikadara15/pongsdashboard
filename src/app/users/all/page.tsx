@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Users, ShieldCheck } from 'lucide-react'
 import Gate from '@/components/Gate'
+import { useNewParam } from '@/lib/useNewParam'
 import { Select } from '@/components/controls'
 import { confirmDialog, toast } from '@/components/feedback'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Avatar, Modal, Field } from '@/components/ui'
@@ -38,6 +39,7 @@ function AllUsersInner() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  useNewParam(() => setShowForm(true))
   const [form, setForm] = useState<FormState>(emptyForm())
   const [editId, setEditId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -155,7 +157,9 @@ function AllUsersInner() {
           <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, city" />
         </div>
         {loading ? <LoadingRows rows={5} cols={5} /> : filtered.length === 0 ? (
-          <EmptyState icon={Users} title={users.length ? 'No users match' : 'No users yet'} />
+          <EmptyState icon={Users} title={users.length ? 'No users match' : 'No users yet'}
+            description={users.length ? 'Try a different name, email or city.' : 'Add the people who quote, install and manage jobs, with access to just the modules they need.'}
+            action={users.length ? undefined : <button onClick={() => { setShowForm(true); setForm(emptyForm()); setEditId(null); setError('') }} className="btn-primary"><Plus size={15} /> Add user</button>} />
         ) : (
           <div className="table-scroll">
             <table className="table table-hover">
@@ -230,7 +234,7 @@ function AllUsersInner() {
 
             <div className="space-y-3">
               <h3 className="section-title">Access</h3>
-              <label className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${form.isAdmin ? 'border-violet-300 bg-violet-50/60' : 'border-gray-200 hover:border-gray-300'}`}>
+              <label className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${form.isAdmin ? 'border-brand-600 bg-brand-50/50' : 'border-gray-200 hover:border-gray-300'}`}>
                 <input type="checkbox" checked={form.isAdmin} onChange={e => setForm(f => ({ ...f, isAdmin: e.target.checked }))} className="checkbox mt-0.5" />
                 <span>
                   <span className="block text-[13px] font-medium text-gray-900">Full administrator</span>

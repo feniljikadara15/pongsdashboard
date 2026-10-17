@@ -90,7 +90,8 @@ export default function ClientDetailPage() {
               <span className="text-xs text-gray-500">{quotes.length}</span>
             </div>
             {quotes.length === 0 ? (
-              <EmptyState icon={FileText} title="No quotes for this client" description={`Quotes whose client is "${client.name}"${client.company ? ` or "${client.company}"` : ''} appear here.`} compact />
+              <EmptyState icon={FileText} title="No quotes for this client" description={`Quotes whose client is "${client.name}"${client.company ? ` or "${client.company}"` : ''} appear here.`}
+                action={<a href="/quotes/new" className="btn-secondary btn-sm">New quote</a>} compact />
             ) : (
               <div className="table-scroll">
                 <table className="table table-hover">
@@ -117,7 +118,7 @@ export default function ClientDetailPage() {
               <span className="text-xs text-gray-500">{projects.length}</span>
             </div>
             {projects.length === 0 ? (
-              <EmptyState icon={HardHat} title="No projects for this client" compact />
+              <EmptyState icon={HardHat} title="No projects for this client" description="When one of their quotes is approved, convert it into a project from the quote." compact />
             ) : (
               <div className="table-scroll">
                 <table className="table table-hover">

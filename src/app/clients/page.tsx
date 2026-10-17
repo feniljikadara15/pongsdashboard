@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Users2 } from 'lucide-react'
 import Gate from '@/components/Gate'
+import { useNewParam } from '@/lib/useNewParam'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Avatar, Stat, StatGrid } from '@/components/ui'
 import ClientFormModal, { EMPTY_CLIENT, CLIENT_STATUSES, CLIENT_STATUS_LABEL, SOURCE_LABEL, type ClientForm } from '@/components/ClientFormModal'
 import { fmtINR } from '@/lib/format'
@@ -22,6 +23,7 @@ function ClientsPageInner() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [editing, setEditing] = useState<{ id?: string; form: ClientForm } | null>(null)
+  useNewParam(() => setEditing({ form: { ...EMPTY_CLIENT } }))
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const load = useCallback(async () => {

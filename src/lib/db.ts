@@ -1,3 +1,4 @@
+import { teamMembersList } from '@/lib/team'
 import { createClient, type InValue } from '@libsql/client'
 import type { Quote } from './types'
 import { fullPermissions, parsePermissions, permissionsForLegacyRole } from './permissions'
@@ -365,7 +366,7 @@ export async function dbGetProject(id: string) {
 }
 
 function projectArgs(body: Record<string, unknown>): InValue[] {
-  const tm = Array.isArray(body.team_members) ? JSON.stringify(body.team_members) : ((body.team_members as string) ?? '[]')
+  const tm = JSON.stringify(teamMembersList(body.team_members))
   return [
     body.name as string ?? '',
     body.client_name as string ?? '',

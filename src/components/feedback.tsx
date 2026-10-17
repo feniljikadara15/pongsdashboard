@@ -70,7 +70,7 @@ function settle(id: number, ok: boolean) {
 }
 
 const TOAST_ICON = { success: CheckCircle2, error: XCircle, info: Info }
-const TOAST_ICON_CLASS = { success: 'text-brand-600', error: 'text-red-600', info: 'text-sky-600' }
+const TOAST_ICON_CLASS = { success: 'text-brand-600', error: 'text-red-600', info: 'text-gray-500' }
 
 function ToastItem({ t }: { t: Toast }) {
   useEffect(() => {

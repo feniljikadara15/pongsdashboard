@@ -5,6 +5,7 @@ import { Pencil, Trash2, Plus, Package } from 'lucide-react'
 import { PageHeader, EmptyState, LoadingRows, SearchInput, Badge, Modal, Field } from '@/components/ui'
 import { PRODUCT_CATEGORIES, stockState, STOCK_LABEL, STOCK_TONE } from '@/lib/inventory'
 import { fmtINR } from '@/lib/format'
+import { useNewParam } from '@/lib/useNewParam'
 import { Select } from '@/components/controls'
 import { confirmDialog, toast } from '@/components/feedback'
 
@@ -18,6 +19,7 @@ const empty = (): Omit<Product, 'id'> => ({ name: '', category: '', sku: '', uni
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [showForm, setShowForm] = useState(false)
+  useNewParam(() => setShowForm(true))
   const [form, setForm] = useState(empty())
   const [editId, setEditId] = useState<string | null>(null)
   const [catFilter, setCatFilter] = useState('')

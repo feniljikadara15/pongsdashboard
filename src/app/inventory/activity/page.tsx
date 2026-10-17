@@ -10,7 +10,7 @@ interface ActivityItem {
 }
 
 const ICON = {
-  purchase: { icon: ShoppingCart, cls: 'bg-sky-50 text-sky-700' },
+  purchase: { icon: ShoppingCart, cls: 'bg-gray-100 text-gray-700' },
   in: { icon: ArrowDownLeft, cls: 'bg-brand-50 text-brand-700' },
   out: { icon: ArrowUpRight, cls: 'bg-gray-100 text-gray-700' },
 }

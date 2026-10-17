@@ -107,29 +107,32 @@ const TONE_CLASS: Record<Tone, string> = {
 }
 const TONE_DOT: Record<Tone, string> = {
   neutral: 'bg-gray-400',
-  info: 'bg-sky-500',
-  success: 'bg-brand-500',
+  info: 'bg-gray-800',
+  success: 'bg-brand-600',
   warning: 'bg-amber-500',
   danger: 'bg-red-500',
-  accent: 'bg-violet-500',
+  accent: 'bg-brand-600',
 }
 
 // Every status string used across modules maps to one tone here, so the same
 // word always carries the same colour.
+// Every status string used across modules maps to one tone here, so the same
+// word always carries the same colour. Amber is reserved for "someone needs to
+// act", red for problems; work in flight uses ink (info).
 const STATUS_TONE: Record<string, Tone> = {
   draft: 'neutral',
   sent: 'info',
   approved: 'success',
   rejected: 'danger',
-  scheduled: 'info',
-  in_progress: 'warning',
-  'in progress': 'warning',
+  scheduled: 'neutral',
+  in_progress: 'info',
+  'in progress': 'info',
   completed: 'success',
-  invoiced: 'accent',
+  invoiced: 'success',
   paid: 'success',
-  on_hold: 'neutral',
-  cancelled: 'danger',
-  canceled: 'danger',
+  on_hold: 'warning',
+  cancelled: 'neutral',
+  canceled: 'neutral',
   pending: 'warning',
   received: 'success',
   partial: 'warning',
@@ -141,12 +144,14 @@ const STATUS_TONE: Record<string, Tone> = {
   lead: 'info',
   prospect: 'info',
   in: 'success',
-  out: 'danger',
+  out: 'neutral',
   adjustment: 'neutral',
-  high: 'danger',
+  high: 'warning',
   urgent: 'danger',
   normal: 'neutral',
   low: 'neutral',
+  vip: 'success',
+  blacklisted: 'danger',
 }
 
 export function toneFor(status: string | null | undefined): Tone {
@@ -160,8 +165,7 @@ export function humanize(s: string | null | undefined): string {
 
 export function Badge({ tone = 'neutral', dot = false, children, className = '' }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string }) {
   return (
-    <span className={`${TONE_CLASS[tone]} ${className}`}>
-      {dot && <span className={`dot ${TONE_DOT[tone]}`} />}
+    <span className={`${TONE_CLASS[tone]} ${dot && tone === 'neutral' ? 'badge-dot' : ''} ${className}`}>
       {children}
     </span>
   )
@@ -357,5 +361,75 @@ export function OptionCards<T extends string>({
         )
       })}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------------- */
+/* Guidance: where a record is in its lifecycle, and what to do next          */
+/* ------------------------------------------------------------------------- */
+
+export type StepState = 'done' | 'current' | 'upcoming' | 'problem'
+
+export function Stepper({ steps }: { steps: { label: ReactNode; state: StepState }[] }) {
+  return (
+    <ol className="flex items-center gap-2 overflow-x-auto text-xs" aria-label="Progress">
+      {steps.map((s, i) => (
+        <li key={i} className="flex shrink-0 items-center gap-2" aria-current={s.state === 'current' ? 'step' : undefined}>
+          {i > 0 && <span className={`h-px w-5 sm:w-8 ${s.state === 'upcoming' ? 'bg-gray-200' : 'bg-gray-400'}`} aria-hidden />}
+          <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-semibold ${
+            s.state === 'done' ? 'bg-brand-600 text-white'
+              : s.state === 'current' ? 'bg-white text-brand-700 ring-[1.5px] ring-brand-600'
+                : s.state === 'problem' ? 'bg-white text-red-600 ring-[1.5px] ring-red-500'
+                  : 'bg-white text-gray-400 ring-1 ring-gray-300'
+          }`}>
+            {s.state === 'done'
+              ? <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 8.5 3 3 6-7" /></svg>
+              : s.state === 'problem' ? '!' : i + 1}
+          </span>
+          <span className={s.state === 'current' || s.state === 'problem' ? 'font-medium text-gray-900' : s.state === 'done' ? 'text-gray-700' : 'text-gray-400'}>
+            {s.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// The one thing to do next on a record, with the action to do it. Every
+// lifecycle screen (quote, project) leads with this so users never have to
+// work out the process themselves.
+export function NextStep({
+  steps,
+  title,
+  description,
+  actions,
+  tone = 'default',
+  className = '',
+}: {
+  steps?: { label: ReactNode; state: StepState }[]
+  title: ReactNode
+  description?: ReactNode
+  actions?: ReactNode
+  tone?: 'default' | 'attention' | 'done'
+  className?: string
+}) {
+  const eyebrow = tone === 'done' ? 'All set' : tone === 'attention' ? 'Needs attention' : 'Next step'
+  const eyebrowCls = tone === 'attention' ? 'text-amber-700' : 'text-brand-700'
+  return (
+    <section className={`card overflow-hidden ${className}`} aria-label={eyebrow}>
+      {steps && (
+        <div className="border-b border-gray-100 bg-gray-50/60 px-5 py-3">
+          <Stepper steps={steps} />
+        </div>
+      )}
+      <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className={`text-2xs font-semibold uppercase tracking-wide ${eyebrowCls}`}>{eyebrow}</p>
+          <p className="mt-1 text-sm font-medium text-gray-900">{title}</p>
+          {description && <p className="mt-0.5 text-[13px] text-gray-500">{description}</p>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
+      </div>
+    </section>
   )
 }

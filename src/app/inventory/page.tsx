@@ -100,7 +100,8 @@ export default function InventoryDashboard() {
             <h2 className="card-title">Products by category</h2>
             <a href="/inventory/products" className="card-link">All products</a>
           </div>
-          {categories.length === 0 ? <EmptyState icon={Package} title="No products yet" compact /> : (
+          {categories.length === 0 ? <EmptyState icon={Package} title="No products yet" description="Add the fabric, profiles and lighting you stock to track levels and reorders."
+            action={<a href="/inventory/products?new=1" className="btn-secondary btn-sm">Add product</a>} compact /> : (
             <ul className="space-y-3 p-5">
               {categories.map(([cat, count]) => (
                 <li key={cat}>

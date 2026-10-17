@@ -55,7 +55,7 @@ export default function NotificationBell() {
             {jobs.length > 0 && <SectionLabel>Scheduled today</SectionLabel>}
             {jobs.map(j => (
               <a key={j.id} href={`/projects/${j.id}`} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-50 text-sky-700"><CalendarClock size={14} /></span>
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-600"><CalendarClock size={14} /></span>
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-medium text-gray-900">{j.name}</span>
                   <span className="block truncate text-xs text-gray-500">{j.client_name}{j.team_lead ? ` · ${j.team_lead}` : ''}</span>

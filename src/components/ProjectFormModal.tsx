@@ -22,16 +22,8 @@ export const EMPTY_PROJECT: Project = {
   priority: 'normal', notes: '', quote_id: '',
 }
 
-// team_members is stored either as a JSON array or as the comma-separated
-// string typed into this form; normalise to the comma form for editing.
-export function teamMembersText(v: unknown): string {
-  if (Array.isArray(v)) return v.join(', ')
-  const s = String(v ?? '').trim()
-  if (s.startsWith('[')) {
-    try { const a = JSON.parse(s); if (Array.isArray(a)) return a.join(', ') } catch { /* not JSON */ }
-  }
-  return s
-}
+export { teamMembersText } from '@/lib/team'
+import { teamMembersText } from '@/lib/team'
 
 // Create or edit a project. Saves through the projects API and calls onSaved.
 export default function ProjectFormModal({ initial, onClose, onSaved }: { initial: Project; onClose: () => void; onSaved: () => void }) {
